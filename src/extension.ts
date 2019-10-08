@@ -40,7 +40,6 @@ class DocumentCompletionHandler {
 
   private async parseDocument(documentText: string): Promise<DocumentCompletionInfo> {
     let result = new DocumentCompletionInfo();
-    
     function onCreateNodeCallback(node: any) {
       switch (node.type) {
         case "Identifier":
@@ -95,6 +94,11 @@ class SEDLua implements vscode.CompletionItemProvider {
       vscode.workspace.onDidOpenTextDocument(this.onDidOpenTextDocument, this));
     context.subscriptions.push(
         vscode.workspace.onDidChangeTextDocument(this.onDidOChangeTextDocument, this));
+    context.subscriptions.push(
+      vscode.workspace.onDidChangeWorkspaceFolders(this.onDidChangeWorkspaceFolders, this));
+
+    this.collectWorkspaceScripts();
+
     // registering as completion provider
     vscode.languages.registerCompletionItemProvider('lua', this, '.', ':', '\"', '\'')
   }
@@ -142,11 +146,69 @@ class SEDLua implements vscode.CompletionItemProvider {
   // holds completion handlers per document path
   private documentCompletionHandlers: Map<string, DocumentCompletionHandler> = new Map<string, DocumentCompletionHandler>();
 
+  private workspaceScripts : Set<string> = new Set<string>();
+
+  private collectWorkspaceScripts()
+  {
+    this.workspaceScripts.clear();
+
+    if (!vscode.workspace.workspaceFolders) {
+      return;
+    }
+
+    this.workspaceScripts = new Set<string>();
+
+    let workspaceScripts = this.workspaceScripts;
+    const supportedScriptExtensions = [".lua"];
+
+    try {
+
+      let readDirectoryResultFunc = (parentDirUri: vscode.Uri, result: [string, vscode.FileType][]) => {
+        for (const fileResult of result) {
+          let [fileName, fileType] = fileResult;
+          let fileUri = vscode.Uri.file(parentDirUri.path + "/" + fileName);
+          if (fileType == vscode.FileType.File) {
+            let fileExt = path.extname(fileName);
+            // skip unsupported script extensions
+            if (supportedScriptExtensions.findIndex(f => fileExt == f) == -1) {
+              continue;
+            }
+            let hardPath = fileUri.fsPath
+            let softPath = this.extractContentSoftPath(hardPath);
+            if (softPath != "") {
+              workspaceScripts.add(softPath)
+            }
+          } else if (fileType == vscode.FileType.Directory) {
+            vscode.workspace.fs.readDirectory(fileUri)
+            .then(readDirectoryResultFunc.bind(null, fileUri))
+          }
+        }
+      };
+
+      for (const workspaceFolder of vscode.workspace.workspaceFolders) {
+        vscode.workspace.fs.readDirectory(workspaceFolder.uri)
+          .then(readDirectoryResultFunc.bind(null, workspaceFolder.uri));
+      }
+    } catch (err) {
+      console.log(err.message);
+    }
+  }
+
+  private onDidChangeWorkspaceFolders(onDidChangeWorkspaceFolders: vscode.WorkspaceFoldersChangeEvent) {
+    this.collectWorkspaceScripts();
+  }
+
   provideCompletionItems(document: vscode.TextDocument, position: vscode.Position,
       token: vscode.CancellationToken, context: vscode.CompletionContext
       ): vscode.ProviderResult<vscode.CompletionItem[] | vscode.CompletionList> {
     if (context.triggerCharacter == '"' || context.triggerCharacter == '\'') {
       let scriptCompletionItems: Array<vscode.CompletionItem> = new Array<vscode.CompletionItem>();
+      function addScriptCompletionItem(softPath: string) {
+        let completionItem = new vscode.CompletionItem(softPath)
+        completionItem.kind = vscode.CompletionItemKind.File;
+        completionItem.documentation = path.basename(softPath) + '\nin '+ path.dirname(softPath);
+        scriptCompletionItems.push(completionItem)
+      }
       for (const doc of vscode.workspace.textDocuments) {
         if (!doc.fileName.endsWith(".lua") || doc == document) {
           continue;
@@ -155,10 +217,11 @@ class SEDLua implements vscode.CompletionItemProvider {
         if (docSoftPath == "") {
           continue;
         }
-        let completionItem = new vscode.CompletionItem(docSoftPath)
-        completionItem.kind = vscode.CompletionItemKind.File;
-        completionItem.documentation = path.basename(docSoftPath) + '\nin '+ path.dirname(docSoftPath);
-        scriptCompletionItems.push(completionItem)
+        addScriptCompletionItem(docSoftPath);
+      }
+
+      for (const scriptSoftPath of this.workspaceScripts) {
+        addScriptCompletionItem(scriptSoftPath);
       }
       return scriptCompletionItems;
     }

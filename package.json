@@ -33,6 +33,7 @@
     "vscode-test": "^1.2.0"
   },
   "dependencies": {
-    "luaparse": "^0.2.1"
+    "luaparse": "^0.2.1",
+    "path": "^0.12.7"
   }
 }
