@@ -50,9 +50,9 @@ class DocumentCompletionHandler {
 
           if (node.base) {
             if (node.base.identifier && node.base.identifier.name) {
-              funcName = node.base.identifier.name
+              funcName = node.base.identifier.name;
             } else if (node.base.name) {
-              funcName = node.base.name
+              funcName = node.base.name;
             }
           }
           if (funcName) {
@@ -100,11 +100,11 @@ class SEDLua implements vscode.CompletionItemProvider {
     this.collectWorkspaceScripts();
 
     // registering as completion provider
-    vscode.languages.registerCompletionItemProvider('lua', this, '.', ':', '\"', '\'')
+    vscode.languages.registerCompletionItemProvider('lua', this, '.', ':', '\"', '\'');
   }
 
   private getOrCreateDocumentCompletionHandler(document: vscode.TextDocument): DocumentCompletionHandler|undefined {
-    if (document.fileName && document.fileName != "") {
+    if (document.fileName && document.fileName !== "") {
       let completionHandler = this.documentCompletionHandlers.get(document.fileName);
       if (!completionHandler) {
         completionHandler = new DocumentCompletionHandler(document);
@@ -117,7 +117,7 @@ class SEDLua implements vscode.CompletionItemProvider {
   }
 
   private onDidOpenTextDocument(document: vscode.TextDocument) {
-    if (document.languageId != "lua") {
+    if (document.languageId !== "lua") {
       return;
     }
     this.getOrCreateDocumentCompletionHandler(document);
@@ -136,7 +136,7 @@ class SEDLua implements vscode.CompletionItemProvider {
       return softPath;
     }
     let startOfSoftPath = softPath.indexOf("/Content/");
-    if (startOfSoftPath != -1) {
+    if (startOfSoftPath !== -1) {
       softPath = softPath.substr(startOfSoftPath + 1);
       return softPath;
     }
@@ -167,20 +167,20 @@ class SEDLua implements vscode.CompletionItemProvider {
         for (const fileResult of result) {
           let [fileName, fileType] = fileResult;
           let fileUri = vscode.Uri.file(parentDirUri.path + "/" + fileName);
-          if (fileType == vscode.FileType.File) {
+          if (fileType === vscode.FileType.File) {
             let fileExt = path.extname(fileName);
             // skip unsupported script extensions
-            if (supportedScriptExtensions.findIndex(f => fileExt == f) == -1) {
+            if (supportedScriptExtensions.findIndex(f => fileExt === f) === -1) {
               continue;
             }
-            let hardPath = fileUri.fsPath
+            let hardPath = fileUri.fsPath;
             let softPath = this.extractContentSoftPath(hardPath);
-            if (softPath != "") {
-              workspaceScripts.add(softPath)
+            if (softPath !== "") {
+              workspaceScripts.add(softPath);
             }
-          } else if (fileType == vscode.FileType.Directory) {
+          } else if (fileType === vscode.FileType.Directory) {
             vscode.workspace.fs.readDirectory(fileUri)
-            .then(readDirectoryResultFunc.bind(null, fileUri))
+            .then(readDirectoryResultFunc.bind(null, fileUri));
           }
         }
       };
@@ -201,20 +201,20 @@ class SEDLua implements vscode.CompletionItemProvider {
   provideCompletionItems(document: vscode.TextDocument, position: vscode.Position,
       token: vscode.CancellationToken, context: vscode.CompletionContext
       ): vscode.ProviderResult<vscode.CompletionItem[] | vscode.CompletionList> {
-    if (context.triggerCharacter == '"' || context.triggerCharacter == '\'') {
+    if (context.triggerCharacter === '"' || context.triggerCharacter === '\'') {
       let scriptCompletionItems: Array<vscode.CompletionItem> = new Array<vscode.CompletionItem>();
       function addScriptCompletionItem(softPath: string) {
-        let completionItem = new vscode.CompletionItem(softPath)
+        let completionItem = new vscode.CompletionItem(softPath);
         completionItem.kind = vscode.CompletionItemKind.File;
         completionItem.documentation = path.basename(softPath) + '\nin '+ path.dirname(softPath);
-        scriptCompletionItems.push(completionItem)
+        scriptCompletionItems.push(completionItem);
       }
       for (const doc of vscode.workspace.textDocuments) {
-        if (!doc.fileName.endsWith(".lua") || doc == document) {
+        if (!doc.fileName.endsWith(".lua") || doc === document) {
           continue;
         }
         let docSoftPath = this.extractContentSoftPath(doc.fileName);
-        if (docSoftPath == "") {
+        if (docSoftPath === "") {
           continue;
         }
         addScriptCompletionItem(docSoftPath);
