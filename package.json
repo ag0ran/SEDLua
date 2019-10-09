@@ -13,7 +13,15 @@
     "onLanguage:lua"
   ],
   "main": "./out/extension.js",
-  "contributes": {},
+  "contributes": {
+    "commands":
+    [
+      {
+        "command": "extension.showDocumentation",
+        "title": "SEDLua: Show Documentation"
+      }
+    ]
+  },
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",

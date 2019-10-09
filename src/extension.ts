@@ -97,6 +97,9 @@ class SEDLua implements vscode.CompletionItemProvider {
     context.subscriptions.push(
       vscode.workspace.onDidChangeWorkspaceFolders(this.onDidChangeWorkspaceFolders, this));
 
+    context.subscriptions.push(
+      vscode.commands.registerCommand("extension.showDocumentation", this.showDocumentation, this));
+
     this.collectWorkspaceScripts();
 
     // registering as completion provider
@@ -114,6 +117,16 @@ class SEDLua implements vscode.CompletionItemProvider {
     } else {
       return undefined;
     }
+  }
+
+  private showDocumentation() {
+    let webviewPanel = vscode.window.createWebviewPanel("landingPage",
+    "SEDLua documentation", vscode.ViewColumn.One,
+    {
+      retainContextWhenHidden: true,
+      enableScripts: true
+    });
+    webviewPanel.webview.html = "Documentation goes here...";
   }
 
   private onDidOpenTextDocument(document: vscode.TextDocument) {
