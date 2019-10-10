@@ -3,10 +3,93 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 let luaparse = require('luaparse');
+import xml2js = require('xml2js');
+import fs = require('fs');
+import { type } from 'os';
+import { stringify } from 'querystring';
 
 class DocumentCompletionInfo {
-  variables : Set<string> = new Set<string>();
-  functions : Set<string> = new Set<string>();
+  variables: Set<string> = new Set<string>();
+  functions: Set<string> = new Set<string>();
+}
+
+class CvarCompletionInfo {
+  name: string = "";
+  type: string = "";
+  briefComment: string = "";
+  detailComment: string = "";
+  attributes: string = "";
+}
+
+class CvarFunctionCompletionInfo {
+  name: string = "";
+  returnType: string = "";
+  briefComment: string = "";
+  detailComment: string = "";
+  attributes: string = "";
+  params: string = "";
+}
+
+class HelpCompletionInfo {
+  cvars: CvarCompletionInfo[] = [];
+  cvarFunctions: CvarFunctionCompletionInfo[] = [];
+
+  processedFiles = new Set<string>();
+
+  addHelpFromFile(filePath: string) {
+    // making sure each file is processed only once
+    if (this.processedFiles.has(filePath)) {
+      return;
+    }
+    this.processedFiles.add(filePath);
+
+    let xml_string = fs.readFileSync(filePath, "utf8");
+    const parser = new xml2js.Parser({explicitArray: false});
+    parser.parseString(xml_string, (error: any, result: any) => {
+      if (error) {
+        vscode.window.showErrorMessage(error);
+        return;
+      }
+      if (result.HELP) {
+        if (result.HELP.CVARS && result.HELP.CVARS.CVAR) {
+          this.addCvars(result.HELP.CVARS.CVAR);
+        }
+      }
+    });
+  }
+
+  private addCvars(cvars: any) {
+    let addCvar = (cvar: any) => {
+      if (cvar.FUNCTION === "true") {
+        let cvarFuncInfo = new CvarFunctionCompletionInfo();
+        cvarFuncInfo.name = cvar.NAME;
+        cvarFuncInfo.returnType = cvar.TYPE;
+        cvarFuncInfo.briefComment = cvar.BRIEF_COMMENT;
+        cvarFuncInfo.detailComment = cvar.DETAIL_COMMENT;
+        cvarFuncInfo.attributes = cvar.PURITY;
+        cvarFuncInfo.params = cvar.PARAMS;
+        this.cvarFunctions.push(cvarFuncInfo);
+      } else {
+        let cvarInfo = new CvarCompletionInfo();
+        cvarInfo.name = cvar.NAME;
+        cvarInfo.type = cvar.TYPE;
+        cvarInfo.briefComment = cvar.BRIEF_COMMENT;
+        cvarInfo.detailComment = cvar.DETAIL_COMMENT;
+        cvarInfo.attributes = cvar.PURITY;
+        if (cvar.SAVED === "true") {
+          cvarInfo.attributes += cvarInfo.attributes !== "" ? "saved" : " saved";
+        }
+        this.cvars.push(cvarInfo);
+      }
+    };
+    if (Array.isArray(cvars)) {
+      for (let cvar of cvars) {
+        addCvar(cvar);
+      }
+    } else {
+      addCvar(cvars);
+    }
+  }
 }
 
 class DocumentCompletionHandler {
@@ -100,6 +183,10 @@ class SEDLua implements vscode.CompletionItemProvider {
     context.subscriptions.push(
       vscode.commands.registerCommand("extension.showDocumentation", this.showDocumentation, this));
 
+    context.subscriptions.push(
+      vscode.commands.registerCommand("extension.loadDocumentation", this.loadDocumentation, this));
+      
+
     this.collectWorkspaceScripts();
 
     // registering as completion provider
@@ -127,6 +214,20 @@ class SEDLua implements vscode.CompletionItemProvider {
       enableScripts: true
     });
     webviewPanel.webview.html = "Documentation goes here...";
+  }
+
+  private loadDocumentation() {
+    let openOptions: vscode.OpenDialogOptions = {filters: {
+      'XML files': ['xml'],
+      }};
+    let docPath = vscode.window.showOpenDialog(openOptions)
+      .then(fileUris => {
+        if (fileUris) {
+          for (let fileUri of fileUris) {
+            this.helpCompletionInfo.addHelpFromFile(fileUri.fsPath);
+          }
+        }
+      });
   }
 
   private onDidOpenTextDocument(document: vscode.TextDocument) {
@@ -158,6 +259,7 @@ class SEDLua implements vscode.CompletionItemProvider {
 
   // holds completion handlers per document path
   private documentCompletionHandlers: Map<string, DocumentCompletionHandler> = new Map<string, DocumentCompletionHandler>();
+  private helpCompletionInfo = new HelpCompletionInfo();
 
   private workspaceScripts : Set<string> = new Set<string>();
 
@@ -239,11 +341,12 @@ class SEDLua implements vscode.CompletionItemProvider {
       return scriptCompletionItems;
     }
 
+    let funcAndVarCompletionItems = new Array<vscode.CompletionItem>();
+
     let completionHandler = this.getOrCreateDocumentCompletionHandler(document);
     if (completionHandler) {
       let completionInfo = completionHandler.getCompletionInfo();
       if (completionInfo) {
-        let funcAndVarCompletionItems : Array<vscode.CompletionItem> = new Array<vscode.CompletionItem>();
         for (const variable of completionInfo.variables) {
 					const varCompletionItem = new vscode.CompletionItem(variable);
 					varCompletionItem.kind = vscode.CompletionItemKind.Variable;
@@ -256,10 +359,27 @@ class SEDLua implements vscode.CompletionItemProvider {
 					funcCompletionItem.documentation = "This is the " + func + " function. Documentation coming soon";
           funcAndVarCompletionItems.push(funcCompletionItem);
         }
-        return funcAndVarCompletionItems;
       }
     }
-    return [];
+
+    for (let cvar of this.helpCompletionInfo.cvars) {
+      const varCompletionItem = new vscode.CompletionItem(cvar.name);
+      varCompletionItem.kind = vscode.CompletionItemKind.Variable;
+      varCompletionItem.detail = cvar.attributes + " cvar " + cvar.type;
+      varCompletionItem.documentation = cvar.briefComment || cvar.detailComment;
+      funcAndVarCompletionItems.push(varCompletionItem);
+    }
+
+    for (let cvarFunc of this.helpCompletionInfo.cvarFunctions) {
+      const varCompletionItem = new vscode.CompletionItem(cvarFunc.name);
+      varCompletionItem.kind = vscode.CompletionItemKind.Function;
+      varCompletionItem.detail = cvarFunc.attributes + " cvar " + cvarFunc.returnType + " " + cvarFunc.name + "(" + cvarFunc.params + ") ";
+      varCompletionItem.documentation = cvarFunc.briefComment || cvarFunc.detailComment;
+      varCompletionItem.insertText = cvarFunc.name + "()";
+      funcAndVarCompletionItems.push(varCompletionItem);
+    }
+
+    return funcAndVarCompletionItems;
   }
 }
 
