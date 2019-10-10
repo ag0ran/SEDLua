@@ -30,9 +30,36 @@ class CvarFunctionCompletionInfo {
   params: string = "";
 }
 
+class MacroVarCompletionInfo {
+  name: string = "";
+  type: string = "";
+  briefComment: string = "";
+  detailComment: string = "";
+}
+
+class MacroFuncCompletionInfo {
+  name: string = "";
+  returnType: string = "";
+  params: string = "";
+  briefComment: string = "";
+  detailComment: string = "";
+}
+
+class MacroClassCompletionInfo {
+  name: string = "";
+  baseClass: string = "";
+  events: string[] = [];
+  memberFunctions : MacroFuncCompletionInfo[] = [];
+  briefComment: string = "";
+}
+
+
 class HelpCompletionInfo {
   cvars: CvarCompletionInfo[] = [];
   cvarFunctions: CvarFunctionCompletionInfo[] = [];
+
+  macroClasses: MacroClassCompletionInfo[] = [];
+  macroFunctions: MacroFuncCompletionInfo[] = [];
 
   processedFiles = new Set<string>();
 
@@ -53,9 +80,61 @@ class HelpCompletionInfo {
       if (result.HELP) {
         if (result.HELP.CVARS && result.HELP.CVARS.CVAR) {
           this.addCvars(result.HELP.CVARS.CVAR);
+        } else if (result.HELP.MACROS) {
+          this.addMacros(result.HELP.MACROS);
         }
       }
     });
+  }
+
+  private addMacroClasses(classes: any) {
+    let addClass = (cl: any) => {
+      let classInfo = new MacroClassCompletionInfo();
+      classInfo.name = cl.NAME;
+      classInfo.baseClass = cl.BASE_CLASS;
+      classInfo.briefComment = cl.COMMENT;
+      if (cl.FUNCTIONS && cl.FUNCTIONS.FUNCTION) {
+        this.addMacroFunctions(cl.FUNCTIONS.FUNCTION, classInfo.memberFunctions);
+      }
+      this.macroClasses.push(classInfo);
+    };
+
+    if (Array.isArray(classes)) {
+      for (let cl of classes) {
+        addClass(cl);
+      }
+    } else {
+      addClass(classes);
+    }
+  }
+
+  private addMacroFunctions(functions: any, functionsArray: MacroFuncCompletionInfo[]) {
+    let addFunc = (func: any) => {
+      let funcInfo = new MacroFuncCompletionInfo();
+      funcInfo.name = func.NAME;
+      funcInfo.returnType = func.RETURN;
+      funcInfo.returnType = func.PARAMS;
+      funcInfo.briefComment = func.BRIEF_COMMENT;
+      funcInfo.detailComment = func.DETAIL_COMMENT;
+      functionsArray.push(funcInfo);
+    };
+    
+    if (Array.isArray(functions)) {
+      for (let func of functions) {
+        addFunc(func);
+      }
+    } else {
+      addFunc(functions);
+    }
+  }
+
+  private addMacros(macros: any) {
+    if (macros.CLASES && macros.CLASSES.CLASS) {
+      this.addMacroClasses(macros.CLASSES.CLASS);
+    }
+    if (macros.FUNCTIONS && macros.FUNCTIONS.FUNCTION) {
+      this.addMacroFunctions(macros.FUNCTIONS.FUNCTION, this.macroFunctions);
+    }
   }
 
   private addCvars(cvars: any) {
@@ -376,6 +455,15 @@ class SEDLua implements vscode.CompletionItemProvider {
       varCompletionItem.detail = cvarFunc.attributes + " cvar " + cvarFunc.returnType + " " + cvarFunc.name + "(" + cvarFunc.params + ") ";
       varCompletionItem.documentation = cvarFunc.briefComment || cvarFunc.detailComment;
       varCompletionItem.insertText = cvarFunc.name + "()";
+      funcAndVarCompletionItems.push(varCompletionItem);
+    }
+
+    for (let macroFunc of this.helpCompletionInfo.macroFunctions) {
+      const varCompletionItem = new vscode.CompletionItem(macroFunc.name);
+      varCompletionItem.kind = vscode.CompletionItemKind.Function;
+      varCompletionItem.detail = macroFunc.returnType + " " + macroFunc.name + "(" + macroFunc.params + ") ";
+      varCompletionItem.documentation = macroFunc.briefComment || macroFunc.detailComment;
+      varCompletionItem.insertText = macroFunc.name + "()";
       funcAndVarCompletionItems.push(varCompletionItem);
     }
 
