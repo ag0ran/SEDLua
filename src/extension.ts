@@ -113,7 +113,7 @@ class HelpCompletionInfo {
       let funcInfo = new MacroFuncCompletionInfo();
       funcInfo.name = func.NAME;
       funcInfo.returnType = func.RETURN;
-      funcInfo.returnType = func.PARAMS;
+      funcInfo.params = func.PARAMS;
       funcInfo.briefComment = func.BRIEF_COMMENT;
       funcInfo.detailComment = func.DETAIL_COMMENT;
       functionsArray.push(funcInfo);
