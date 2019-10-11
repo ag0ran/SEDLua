@@ -5,6 +5,7 @@ import * as path from 'path';
 let luaparse = require('luaparse');
 import xml2js = require('xml2js');
 import fs = require('fs');
+import * as seFilesystem from './sefilesystem';
 
 class DocumentCompletionInfo {
   variables: Set<string> = new Set<string>();
@@ -274,10 +275,27 @@ class SEDLua implements vscode.CompletionItemProvider {
       vscode.commands.registerCommand("extension.loadDocumentation", this.loadDocumentation, this));
       
 
-    this.collectWorkspaceScripts();
+    this.initWorkspace();
 
     // registering as completion provider
     vscode.languages.registerCompletionItemProvider('lua', this, '.', ':', '\"', '\'');
+  }
+
+  private async initWorkspace() {
+    let filesystemInitialized = false;
+    if (vscode.workspace.workspaceFolders) {
+      for (let workspaceFolder of vscode.workspace.workspaceFolders) {
+        filesystemInitialized = await seFilesystem.initFilesystem(workspaceFolder.uri);
+        if (filesystemInitialized) {
+          break;
+        }
+      }
+    }
+    if (!filesystemInitialized) {
+      return;
+    }
+    
+    this.collectWorkspaceScripts();
   }
 
   private getOrCreateDocumentCompletionHandler(document: vscode.TextDocument): DocumentCompletionHandler|undefined {
@@ -353,51 +371,24 @@ class SEDLua implements vscode.CompletionItemProvider {
   private collectWorkspaceScripts()
   {
     this.workspaceScripts.clear();
-
-    if (!vscode.workspace.workspaceFolders) {
-      return;
-    }
-
-    this.workspaceScripts = new Set<string>();
-
-    let workspaceScripts = this.workspaceScripts;
-    const supportedScriptExtensions = [".lua"];
-
-    try {
-
-      let readDirectoryResultFunc = (parentDirUri: vscode.Uri, result: [string, vscode.FileType][]) => {
-        for (const fileResult of result) {
-          let [fileName, fileType] = fileResult;
-          let fileUri = vscode.Uri.file(parentDirUri.path + "/" + fileName);
-          if (fileType === vscode.FileType.File) {
-            let fileExt = path.extname(fileName);
-            // skip unsupported script extensions
-            if (supportedScriptExtensions.findIndex(f => fileExt === f) === -1) {
-              continue;
-            }
-            let hardPath = fileUri.fsPath;
-            let softPath = this.extractContentSoftPath(hardPath);
-            if (softPath !== "") {
-              workspaceScripts.add(softPath);
-            }
-          } else if (fileType === vscode.FileType.Directory) {
-            vscode.workspace.fs.readDirectory(fileUri)
-            .then(readDirectoryResultFunc.bind(null, fileUri));
-          }
-        }
+    if (vscode.workspace.workspaceFolders) {
+      let forFileFunc = (fileUri: vscode.Uri) => {
+        this.workspaceScripts.add(seFilesystem.uriToSoftpath(fileUri));
       };
-
-      for (const workspaceFolder of vscode.workspace.workspaceFolders) {
-        vscode.workspace.fs.readDirectory(workspaceFolder.uri)
-          .then(readDirectoryResultFunc.bind(null, workspaceFolder.uri));
+      let fileFilter = new Set([".lua"]);
+      for (let workspaceFolder of vscode.workspace.workspaceFolders) {
+        let forEachFileOptions: seFilesystem.ForEachFileOptions = {
+          startingDirUri: workspaceFolder.uri,
+          forFileFunc: forFileFunc,
+          fileFilter: fileFilter,
+        };
+        seFilesystem.forEachFileRecursive(forEachFileOptions);
       }
-    } catch (err) {
-      console.log(err.message);
     }
   }
 
   private onDidChangeWorkspaceFolders(onDidChangeWorkspaceFolders: vscode.WorkspaceFoldersChangeEvent) {
-    this.collectWorkspaceScripts();
+    this.initWorkspace();
   }
 
   provideCompletionItems(document: vscode.TextDocument, position: vscode.Position,
