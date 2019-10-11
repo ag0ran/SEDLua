@@ -296,6 +296,7 @@ class SEDLua implements vscode.CompletionItemProvider {
     }
     
     this.collectWorkspaceScripts();
+    this.collectHelpFiles();
   }
 
   private getOrCreateDocumentCompletionHandler(document: vscode.TextDocument): DocumentCompletionHandler|undefined {
@@ -385,6 +386,19 @@ class SEDLua implements vscode.CompletionItemProvider {
         seFilesystem.forEachFileRecursive(forEachFileOptions);
       }
     }
+  }
+
+  // Collects information from all xml help files (cvars and macros).
+  private collectHelpFiles() {
+    this.helpCompletionInfo = new HelpCompletionInfo();
+    let forEachFileOptions: seFilesystem.ForEachFileOptions = {
+      startingDirUri: seFilesystem.softPathToUri("Help/"),
+      fileFilter: new Set([".xml"]),
+      forFileFunc: (fileUri: vscode.Uri) => {
+        this.helpCompletionInfo.addHelpFromFile(fileUri.fsPath);
+      }
+    };
+    seFilesystem.forEachFileRecursive(forEachFileOptions);
   }
 
   private onDidChangeWorkspaceFolders(onDidChangeWorkspaceFolders: vscode.WorkspaceFoldersChangeEvent) {

@@ -43,8 +43,11 @@ export function uriToSoftpath(uri: Uri) {
   }
   return uri.path.substr(filesystemRoot.length);
 }
+export function softPathToUri(softPath: string): Uri {
+  return Uri.file(filesystemRoot + softPath);
+}
 export function softPathToHardPath(softPath: string) {
-  return Uri.file(filesystemRoot + softPath).fsPath;
+  return softPathToUri(softPath).fsPath;
 }
 
 
