@@ -5,12 +5,20 @@ import * as path from 'path';
 let luaparse = require('luaparse');
 import xml2js = require('xml2js');
 import fs = require('fs');
-import { type } from 'os';
-import { stringify } from 'querystring';
 
 class DocumentCompletionInfo {
   variables: Set<string> = new Set<string>();
   functions: Set<string> = new Set<string>();
+}
+
+function unescapeString(s: string)
+{
+  return s.replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&").replace(/&quot;/g, "\"").replace(/&apos;/g, "\'");
+}
+
+function normalizeXmlValue(s: string) {
+  return unescapeString(s).trim();
 }
 
 class CvarCompletionInfo {
@@ -92,7 +100,7 @@ class HelpCompletionInfo {
       let classInfo = new MacroClassCompletionInfo();
       classInfo.name = cl.NAME;
       classInfo.baseClass = cl.BASE_CLASS;
-      classInfo.briefComment = cl.COMMENT;
+      classInfo.briefComment = normalizeXmlValue(cl.COMMENT);
       if (cl.FUNCTIONS && cl.FUNCTIONS.FUNCTION) {
         this.addMacroFunctions(cl.FUNCTIONS.FUNCTION, classInfo.memberFunctions);
       }
@@ -112,10 +120,10 @@ class HelpCompletionInfo {
     let addFunc = (func: any) => {
       let funcInfo = new MacroFuncCompletionInfo();
       funcInfo.name = func.NAME;
-      funcInfo.returnType = func.RETURN;
-      funcInfo.params = func.PARAMS;
-      funcInfo.briefComment = func.BRIEF_COMMENT;
-      funcInfo.detailComment = func.DETAIL_COMMENT;
+      funcInfo.returnType = normalizeXmlValue(func.RETURN);
+      funcInfo.params = normalizeXmlValue(func.PARAMS);
+      funcInfo.briefComment = normalizeXmlValue(func.BRIEF_COMMENT);
+      funcInfo.detailComment = normalizeXmlValue(func.DETAIL_COMMENT);
       functionsArray.push(funcInfo);
     };
     
@@ -142,18 +150,18 @@ class HelpCompletionInfo {
       if (cvar.FUNCTION === "true") {
         let cvarFuncInfo = new CvarFunctionCompletionInfo();
         cvarFuncInfo.name = cvar.NAME;
-        cvarFuncInfo.returnType = cvar.TYPE;
-        cvarFuncInfo.briefComment = cvar.BRIEF_COMMENT;
-        cvarFuncInfo.detailComment = cvar.DETAIL_COMMENT;
+        cvarFuncInfo.returnType = normalizeXmlValue(cvar.TYPE);
+        cvarFuncInfo.briefComment = normalizeXmlValue(cvar.BRIEF_COMMENT);
+        cvarFuncInfo.detailComment = normalizeXmlValue(cvar.DETAIL_COMMENT);
         cvarFuncInfo.attributes = cvar.PURITY;
-        cvarFuncInfo.params = cvar.PARAMS;
+        cvarFuncInfo.params = normalizeXmlValue(cvar.PARAMS);
         this.cvarFunctions.push(cvarFuncInfo);
       } else {
         let cvarInfo = new CvarCompletionInfo();
         cvarInfo.name = cvar.NAME;
         cvarInfo.type = cvar.TYPE;
-        cvarInfo.briefComment = cvar.BRIEF_COMMENT;
-        cvarInfo.detailComment = cvar.DETAIL_COMMENT;
+        cvarInfo.briefComment = normalizeXmlValue(cvar.BRIEF_COMMENT);
+        cvarInfo.detailComment = normalizeXmlValue(cvar.DETAIL_COMMENT);
         cvarInfo.attributes = cvar.PURITY;
         if (cvar.SAVED === "true") {
           cvarInfo.attributes += cvarInfo.attributes !== "" ? "saved" : " saved";
