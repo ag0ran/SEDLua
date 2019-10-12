@@ -21,12 +21,41 @@ class SEDLua implements vscode.CompletionItemProvider {
 
     context.subscriptions.push(
       vscode.commands.registerCommand("extension.loadDocumentation", this.loadDocumentation, this));
-      
+
 
     this.initWorkspace();
 
     // registering as completion provider
     vscode.languages.registerCompletionItemProvider('lua', this, '.', ':', '\"', '\'');
+
+    // registering as hover provider
+    vscode.languages.registerHoverProvider("lua", this);
+
+  }
+  
+  provideHover(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken): vscode.ProviderResult<vscode.Hover> {
+    let completionHandler = this.getOrCreateDocumentCompletionHandler(document);
+    if (!completionHandler) {
+      return undefined;
+    }
+    let completionInfo = completionHandler.getCompletionInfo();
+    if (!completionInfo) {
+      return undefined;
+    }
+    let wordRange = document.getWordRangeAtPosition(position);
+    if (!wordRange) {
+      return undefined;
+    }
+
+    let word = document.getText(wordRange);
+    let variableInfo = completionInfo.variables.get(word);
+    if (variableInfo && variableInfo.type) {
+      let hover = new vscode.Hover(`${word} : ${variableInfo.type}`);
+      hover.range = wordRange;
+      return hover;
+    }
+
+    return undefined;
   }
 
   private async initWorkspace() {
@@ -188,11 +217,14 @@ class SEDLua implements vscode.CompletionItemProvider {
     if (completionHandler) {
       let completionInfo = completionHandler.getCompletionInfo();
       if (completionInfo) {
-        for (const variable of completionInfo.variables) {
-					const varCompletionItem = new vscode.CompletionItem(variable);
-					varCompletionItem.kind = vscode.CompletionItemKind.Variable;
+        completionInfo.variables.forEach((variableInfo, variableName) => {
+					const varCompletionItem = new vscode.CompletionItem(variableName);
+          varCompletionItem.kind = vscode.CompletionItemKind.Variable;
+          if (variableInfo.type !== undefined) {
+            varCompletionItem.detail = variableInfo.type;
+          }
           funcAndVarCompletionItems.push(varCompletionItem);
-        }
+        });
         for (const func of completionInfo.functions) {
 					const funcCompletionItem = new vscode.CompletionItem(func);
 					funcCompletionItem.kind = vscode.CompletionItemKind.Function;

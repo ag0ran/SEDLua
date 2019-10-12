@@ -1,8 +1,15 @@
 let luaparse = require('luaparse');
 import * as vscode from 'vscode';
 
+class VariableInfo {
+  constructor(varType?: string) {
+    this.type = varType;
+  }
+  type: string|undefined;
+}
+
 export class DocumentCompletionInfo {
-  variables: Set<string> = new Set<string>();
+  variables: Map<string, VariableInfo> = new Map<string, VariableInfo>();
   functions: Set<string> = new Set<string>();
 }
 
@@ -40,7 +47,19 @@ export class DocumentCompletionHandler {
     function onCreateNodeCallback(node: any) {
       switch (node.type) {
         case "Identifier":
-          result.variables.add(node.name);
+          let varName: string = node.name;
+          if (!result.variables.get(varName)) {
+            result.variables.set(varName, new VariableInfo());
+          }
+          break;
+        case "Comment":
+          let comment: string = node.value;
+          let commentMatch = comment.match(/(\w+)\s*:\s*(\w+)/);
+          if (commentMatch) {
+            let varName: string = commentMatch[1];
+            let varType: string = commentMatch[2];
+            result.variables.set(varName, new VariableInfo(varType));
+          }
           break;
         case "CallExpression":
           let funcName;
