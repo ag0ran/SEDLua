@@ -2,14 +2,8 @@ import xml2js = require('xml2js');
 import fs = require('fs');
 import * as vscode from 'vscode';
 
-function unescapeString(s: string)
-{
-  return s.replace(/&lt;/g, "<").replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&").replace(/&quot;/g, "\"").replace(/&apos;/g, "\'");
-}
-
 function normalizeXmlValue(s: string) {
-  return unescapeString(s).trim();
+  return s.trim();
 }
 
 class CvarCompletionInfo {
