@@ -43,8 +43,11 @@ class SEDLua implements vscode.CompletionItemProvider {
       return;
     }
     
-    this.collectWorkspaceScripts();
-    this.collectHelpFiles();
+    this.workspaceScripts = new Set<string>();
+    SEDLua.collectWorkspaceScripts(this.workspaceScripts);
+
+    this.helpCompletionInfo = new HelpCompletionInfo();
+    SEDLua.collectHelpFiles(this.helpCompletionInfo);
   }
 
   private getOrCreateDocumentCompletionHandler(document: vscode.TextDocument): DocumentCompletionHandler|undefined {
@@ -117,12 +120,11 @@ class SEDLua implements vscode.CompletionItemProvider {
 
   private workspaceScripts : Set<string> = new Set<string>();
 
-  private collectWorkspaceScripts()
+  private static collectWorkspaceScripts(workspaceScripts: Set<string>)
   {
-    this.workspaceScripts.clear();
     if (vscode.workspace.workspaceFolders) {
       let forFileFunc = (fileUri: vscode.Uri) => {
-        this.workspaceScripts.add(seFilesystem.uriToSoftpath(fileUri));
+        workspaceScripts.add(seFilesystem.uriToSoftpath(fileUri));
       };
       let fileFilter = new Set([".lua"]);
       for (let workspaceFolder of vscode.workspace.workspaceFolders) {
@@ -137,13 +139,12 @@ class SEDLua implements vscode.CompletionItemProvider {
   }
 
   // Collects information from all xml help files (cvars and macros).
-  private collectHelpFiles() {
-    this.helpCompletionInfo = new HelpCompletionInfo();
+  private static collectHelpFiles(helpCompletionInfo: HelpCompletionInfo) {
     let forEachFileOptions: seFilesystem.ForEachFileOptions = {
       startingDirUri: seFilesystem.softPathToUri("Help/"),
       fileFilter: new Set([".xml"]),
       forFileFunc: (fileUri: vscode.Uri) => {
-        this.helpCompletionInfo.addHelpFromFile(fileUri.fsPath);
+        helpCompletionInfo.addHelpFromFile(fileUri.fsPath);
       }
     };
     seFilesystem.forEachFileRecursive(forEachFileOptions);
