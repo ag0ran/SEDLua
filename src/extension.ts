@@ -185,6 +185,41 @@ class SEDLua implements vscode.CompletionItemProvider {
     this.initWorkspace();
   }
 
+  private provideCommentCompletionItems(document: vscode.TextDocument, position: vscode.Position,
+    token: vscode.CancellationToken, context: vscode.CompletionContext
+    ): vscode.ProviderResult<vscode.CompletionItem[] | vscode.CompletionList>
+  {
+    let currentLine = document.lineAt(position.line);
+    if (!currentLine) {
+      return undefined;
+    }
+    let currentLineUpToPosition = currentLine.text.substring(0, position.character);
+    // match the type hint start in the current line up to current position (the last one up to current position)
+    let typeHintMatch = currentLineUpToPosition.match(/\w+\s*:\s*/g);
+    if (!typeHintMatch) {
+      return undefined;
+    }
+    let lastMatchString = typeHintMatch[typeHintMatch.length - 1];
+    let lastHintStart = currentLineUpToPosition.lastIndexOf(lastMatchString);
+    // check if there's a whitespace between the type hint end and the current character
+    // (in that case, we're no longer in the type hint)
+    let remainingLineUpToPosition = currentLineUpToPosition.substring(lastHintStart + lastMatchString.length);
+    if (remainingLineUpToPosition.match(/\s/)) {
+      return;
+    }
+    let classCompletionItems = new Array<vscode.CompletionItem>();
+    for (const macroClass of this.helpCompletionInfo.macroClasses) {
+      let classCompletionItem = new vscode.CompletionItem(macroClass.name);
+      classCompletionItem.kind = vscode.CompletionItemKind.Class;
+      classCompletionItem.documentation = new vscode.MarkdownString(
+        `class \`${macroClass.name}\`\n\n${macroClass.briefComment}`);
+      // (adding a space after the ':' if not there already)
+      classCompletionItem.insertText = lastMatchString[lastMatchString.length - 1] === ':' ? " " + macroClass.name : macroClass.name;
+      classCompletionItems.push(classCompletionItem);
+    }
+    return classCompletionItems;
+  }
+
   provideCompletionItems(document: vscode.TextDocument, position: vscode.Position,
       token: vscode.CancellationToken, context: vscode.CompletionContext
       ): vscode.ProviderResult<vscode.CompletionItem[] | vscode.CompletionList> {
@@ -202,42 +237,48 @@ class SEDLua implements vscode.CompletionItemProvider {
     let currentOffset = document.offsetAt(position);
     let currentParseInfo = completionInfo.getParseInfoAroundOffset(currentOffset);
     if (currentParseInfo) {
-      let indexedVarToken: TokenInfo|undefined;
-      let indexingChar: string|undefined;
-      function isIndexingChar(char: string) {return char === '.' || char === ':';}
-      function isIndexingToken(token: TokenInfo|undefined) {return token && isIndexingChar(token.value);}
-      if (context.triggerCharacter && isIndexingChar(context.triggerCharacter)) {
-        indexingChar = context.triggerCharacter;
-        indexedVarToken = currentParseInfo.token1Before;
-      } else if (isIndexingToken(currentParseInfo.token0)) {
-        indexingChar = currentParseInfo.token0!.value;
-        indexedVarToken = currentParseInfo.token1Before;
-      } else if (isIndexingToken(currentParseInfo.token1Before)) {
-        indexingChar = currentParseInfo.token1Before!.value;
-        indexedVarToken = currentParseInfo.token2Before;
-      }
+      // in comment we can auto complete a type definition (<identifier> : <macro class name>)
+      if (currentParseInfo.token0 && currentParseInfo.token0.type === "Comment"
+          || currentParseInfo.token1Before && currentParseInfo.token1Before.type === "Comment") {
+        return this.provideCommentCompletionItems(document, position, token, context);
+      } else {
+        let indexedVarToken: TokenInfo|undefined;
+        let indexingChar: string|undefined;
+        function isIndexingChar(char: string) {return char === '.' || char === ':';}
+        function isIndexingToken(token: TokenInfo|undefined) {return token && isIndexingChar(token.value);}
+        if (context.triggerCharacter && isIndexingChar(context.triggerCharacter)) {
+          indexingChar = context.triggerCharacter;
+          indexedVarToken = currentParseInfo.token1Before;
+        } else if (isIndexingToken(currentParseInfo.token0)) {
+          indexingChar = currentParseInfo.token0!.value;
+          indexedVarToken = currentParseInfo.token1Before;
+        } else if (isIndexingToken(currentParseInfo.token1Before)) {
+          indexingChar = currentParseInfo.token1Before!.value;
+          indexedVarToken = currentParseInfo.token2Before;
+        }
 
-      if (indexedVarToken && indexedVarToken.type === "Identifier") {
-        let classCompletionItems = new Array<vscode.CompletionItem>();
-        let varInfo = completionInfo.variables.get(indexedVarToken.value);
-        if (varInfo && varInfo.type) {
-          let macroClassInfo = this.helpCompletionInfo.findMacroClassInfo(varInfo.type);
-          if (macroClassInfo) {
-            if (indexingChar === ":") {
-              this.helpCompletionInfo.forEachMacroClassFunction(macroClassInfo, (funcInfo) => {
-                let funcCompletionItem = createMacroFuncCompletionItem(funcInfo);
-                classCompletionItems.push(funcCompletionItem);
-              });
-            } else {
-              this.helpCompletionInfo.forEachMacroClassEvent(macroClassInfo, (event) => {
-                let eventCompletionItem = new vscode.CompletionItem(event);
-                eventCompletionItem.kind = vscode.CompletionItemKind.Event;
-                classCompletionItems.push(eventCompletionItem);
-              });
+        if (indexedVarToken && indexedVarToken.type === "Identifier") {
+          let classCompletionItems = new Array<vscode.CompletionItem>();
+          let varInfo = completionInfo.variables.get(indexedVarToken.value);
+          if (varInfo && varInfo.type) {
+            let macroClassInfo = this.helpCompletionInfo.findMacroClassInfo(varInfo.type);
+            if (macroClassInfo) {
+              if (indexingChar === ":") {
+                this.helpCompletionInfo.forEachMacroClassFunction(macroClassInfo, (funcInfo) => {
+                  let funcCompletionItem = createMacroFuncCompletionItem(funcInfo);
+                  classCompletionItems.push(funcCompletionItem);
+                });
+              } else {
+                this.helpCompletionInfo.forEachMacroClassEvent(macroClassInfo, (event) => {
+                  let eventCompletionItem = new vscode.CompletionItem(event);
+                  eventCompletionItem.kind = vscode.CompletionItemKind.Event;
+                  classCompletionItems.push(eventCompletionItem);
+                });
+              }
             }
           }
+          return classCompletionItems;
         }
-        return classCompletionItems;
       }
     }
 

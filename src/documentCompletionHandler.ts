@@ -1,4 +1,4 @@
-let luaparse = require('luaparse');
+let luaparse = require('./luaparse');
 import * as vscode from 'vscode';
 
 class VariableInfo {
@@ -12,8 +12,15 @@ let luaparseTokenToStringMap : Map<number, string>|undefined;
 function luaparseTokenTypeToString(luaparseTokenType: number): string {
   if (!luaparseTokenToStringMap) {
     luaparseTokenToStringMap = new Map<number, string>();
+    let commentFound = false;
     for (let tokenString in luaparse.tokenTypes) {
+      if (tokenString === "Comment") {
+        commentFound = true;
+      }
       luaparseTokenToStringMap.set(luaparse.tokenTypes[tokenString], tokenString);
+    }
+    if (!commentFound) {
+      luaparseTokenToStringMap.set(-1, "Comment");
     }
   }
   return luaparseTokenToStringMap.get(luaparseTokenType) || "";
@@ -158,8 +165,21 @@ export class DocumentCompletionHandler {
     } finally {
       parseOptions.wait = true;
       let manualParser = luaparse.parse(documentText, parseOptions);
+      // We will also collect comments as tokens as we're interested in them for
+      // variable hinting purposes.
+      let lastCommentsLen = 0;
       while (true) {
         let token = manualParser.lex();
+        if (manualParser.comments && lastCommentsLen !== manualParser.comments.length) {
+          lastCommentsLen = manualParser.comments.length;
+          let comment = manualParser.comments[lastCommentsLen - 1];
+          let commentToken = {
+            type: -1,
+            value: comment.value,
+            range: comment.range,
+          };
+          result.tokens.push(commentToken);
+        }
         if (!token || token.type === luaparse.tokenTypes.EOF) {
           break;
         }
