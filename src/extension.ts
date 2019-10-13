@@ -3,8 +3,8 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as seFilesystem from './sefilesystem';
-import {DocumentCompletionHandler, DocumentCompletionInfo} from './documentCompletionHandler';
-import {HelpCompletionInfo} from './seHelp';
+import {DocumentCompletionHandler, DocumentCompletionInfo, TokenInfo} from './documentCompletionHandler';
+import {HelpCompletionInfo, MacroFuncCompletionInfo} from './seHelp';
 
 class SEDLua implements vscode.CompletionItemProvider {
   constructor(context: vscode.ExtensionContext) {
@@ -48,14 +48,16 @@ class SEDLua implements vscode.CompletionItemProvider {
     }
 
     let word = document.getText(wordRange);
+    if (word === "") {
+      return undefined;
+    }
     let variableInfo = completionInfo.variables.get(word);
     if (variableInfo && variableInfo.type) {
       let hover = new vscode.Hover(`${word} : ${variableInfo.type}`);
       hover.range = wordRange;
       return hover;
     }
-
-    return undefined;
+    return new vscode.Hover(word);
   }
 
   private async initWorkspace() {
@@ -186,6 +188,59 @@ class SEDLua implements vscode.CompletionItemProvider {
   provideCompletionItems(document: vscode.TextDocument, position: vscode.Position,
       token: vscode.CancellationToken, context: vscode.CompletionContext
       ): vscode.ProviderResult<vscode.CompletionItem[] | vscode.CompletionList> {
+
+    let completionHandler = this.getOrCreateDocumentCompletionHandler(document);
+    if (!completionHandler) {
+      return;
+    }
+    let completionInfo = completionHandler.getCompletionInfo();
+    if (!completionInfo) {
+      return null;
+    }
+
+    // try to find a token at current offset
+    let currentOffset = document.offsetAt(position);
+    let currentParseInfo = completionInfo.getParseInfoAroundOffset(currentOffset);
+    if (currentParseInfo) {
+      let indexedVarToken: TokenInfo|undefined;
+      let indexingChar: string|undefined;
+      function isIndexingChar(char: string) {return char === '.' || char === ':';}
+      function isIndexingToken(token: TokenInfo|undefined) {return token && isIndexingChar(token.value);}
+      if (context.triggerCharacter && isIndexingChar(context.triggerCharacter)) {
+        indexingChar = context.triggerCharacter;
+        indexedVarToken = currentParseInfo.token1Before;
+      } else if (isIndexingToken(currentParseInfo.token0)) {
+        indexingChar = currentParseInfo.token0!.value;
+        indexedVarToken = currentParseInfo.token1Before;
+      } else if (isIndexingToken(currentParseInfo.token1Before)) {
+        indexingChar = currentParseInfo.token1Before!.value;
+        indexedVarToken = currentParseInfo.token2Before;
+      }
+
+      if (indexedVarToken && indexedVarToken.type === "Identifier") {
+        let classCompletionItems = new Array<vscode.CompletionItem>();
+        let varInfo = completionInfo.variables.get(indexedVarToken.value);
+        if (varInfo && varInfo.type) {
+          let macroClassInfo = this.helpCompletionInfo.findMacroClassInfo(varInfo.type);
+          if (macroClassInfo) {
+            if (indexingChar === ":") {
+              this.helpCompletionInfo.forEachMacroClassFunction(macroClassInfo, (funcInfo) => {
+                let funcCompletionItem = createMacroFuncCompletionItem(funcInfo);
+                classCompletionItems.push(funcCompletionItem);
+              });
+            } else {
+              this.helpCompletionInfo.forEachMacroClassEvent(macroClassInfo, (event) => {
+                let eventCompletionItem = new vscode.CompletionItem(event);
+                eventCompletionItem.kind = vscode.CompletionItemKind.Event;
+                classCompletionItems.push(eventCompletionItem);
+              });
+            }
+          }
+        }
+        return classCompletionItems;
+      }
+    }
+
     if (context.triggerCharacter === '"' || context.triggerCharacter === '\'') {
       let scriptCompletionItems: Array<vscode.CompletionItem> = new Array<vscode.CompletionItem>();
       function addScriptCompletionItem(softPath: string) {
@@ -213,26 +268,21 @@ class SEDLua implements vscode.CompletionItemProvider {
 
     let funcAndVarCompletionItems = new Array<vscode.CompletionItem>();
 
-    let completionHandler = this.getOrCreateDocumentCompletionHandler(document);
-    if (completionHandler) {
-      let completionInfo = completionHandler.getCompletionInfo();
-      if (completionInfo) {
-        completionInfo.variables.forEach((variableInfo, variableName) => {
-					const varCompletionItem = new vscode.CompletionItem(variableName);
-          varCompletionItem.kind = vscode.CompletionItemKind.Variable;
-          if (variableInfo.type !== undefined) {
-            varCompletionItem.detail = variableInfo.type;
-          }
-          funcAndVarCompletionItems.push(varCompletionItem);
-        });
-        for (const func of completionInfo.functions) {
-					const funcCompletionItem = new vscode.CompletionItem(func);
-					funcCompletionItem.kind = vscode.CompletionItemKind.Function;
-					funcCompletionItem.insertText = func + "()";
-					funcCompletionItem.documentation = "This is the " + func + " function. Documentation coming soon";
-          funcAndVarCompletionItems.push(funcCompletionItem);
-        }
+
+    completionInfo.variables.forEach((variableInfo, variableName) => {
+      const varCompletionItem = new vscode.CompletionItem(variableName);
+      varCompletionItem.kind = vscode.CompletionItemKind.Variable;
+      if (variableInfo.type !== undefined) {
+        varCompletionItem.detail = variableInfo.type;
       }
+      funcAndVarCompletionItems.push(varCompletionItem);
+    });
+    for (const func of completionInfo.functions) {
+      const funcCompletionItem = new vscode.CompletionItem(func);
+      funcCompletionItem.kind = vscode.CompletionItemKind.Function;
+      funcCompletionItem.insertText = func + "()";
+      funcCompletionItem.documentation = "This is the " + func + " function. Documentation coming soon";
+      funcAndVarCompletionItems.push(funcCompletionItem);
     }
 
     for (let cvar of this.helpCompletionInfo.cvars) {
@@ -253,16 +303,21 @@ class SEDLua implements vscode.CompletionItemProvider {
     }
 
     for (let macroFunc of this.helpCompletionInfo.macroFunctions) {
-      const varCompletionItem = new vscode.CompletionItem(macroFunc.name);
-      varCompletionItem.kind = vscode.CompletionItemKind.Function;
-      varCompletionItem.detail = macroFunc.returnType + " " + macroFunc.name + "(" + macroFunc.params + ") ";
-      varCompletionItem.documentation = macroFunc.briefComment || macroFunc.detailComment;
-      varCompletionItem.insertText = macroFunc.name + "()";
+      const varCompletionItem = createMacroFuncCompletionItem(macroFunc);
       funcAndVarCompletionItems.push(varCompletionItem);
     }
 
     return funcAndVarCompletionItems;
   }
+}
+
+function createMacroFuncCompletionItem(macroFunc: MacroFuncCompletionInfo) {
+  const varCompletionItem = new vscode.CompletionItem(macroFunc.name);
+  varCompletionItem.kind = vscode.CompletionItemKind.Function;
+  varCompletionItem.detail = macroFunc.returnType + " " + macroFunc.name + "(" + macroFunc.params + ") ";
+  varCompletionItem.documentation = macroFunc.briefComment || macroFunc.detailComment;
+  varCompletionItem.insertText = macroFunc.name + "()";
+  return varCompletionItem;
 }
 
 // Called when extension is first activated.

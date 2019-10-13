@@ -6,7 +6,7 @@ function normalizeXmlValue(s: string) {
   return s.trim();
 }
 
-class CvarCompletionInfo {
+export class CvarCompletionInfo {
   name: string = "";
   type: string = "";
   briefComment: string = "";
@@ -14,7 +14,7 @@ class CvarCompletionInfo {
   attributes: string = "";
 }
 
-class CvarFunctionCompletionInfo {
+export class CvarFunctionCompletionInfo {
   name: string = "";
   returnType: string = "";
   briefComment: string = "";
@@ -30,7 +30,7 @@ class MacroVarCompletionInfo {
   detailComment: string = "";
 }
 
-class MacroFuncCompletionInfo {
+export class MacroFuncCompletionInfo {
   name: string = "";
   returnType: string = "";
   params: string = "";
@@ -38,7 +38,7 @@ class MacroFuncCompletionInfo {
   detailComment: string = "";
 }
 
-class MacroClassCompletionInfo {
+export class MacroClassCompletionInfo {
   name: string = "";
   baseClass: string = "";
   events: string[] = [];
@@ -52,9 +52,45 @@ export class HelpCompletionInfo {
   cvarFunctions: CvarFunctionCompletionInfo[] = [];
 
   macroClasses: MacroClassCompletionInfo[] = [];
+  macroClassesMap = new Map<string, number>();
   macroFunctions: MacroFuncCompletionInfo[] = [];
 
   processedFiles = new Set<string>();
+
+  findMacroClassInfo(className: string): MacroClassCompletionInfo|undefined {
+    let macroClassIndex = this.macroClassesMap.get(className);
+    if (!macroClassIndex) {
+      return undefined;
+    }
+    return this.macroClasses[macroClassIndex];
+  }
+
+  // Calls the callback function for each of the class' functions (including base classes)
+  forEachMacroClassFunction(classInfo: MacroClassCompletionInfo|undefined, callbackFunc: (funcInfo: MacroFuncCompletionInfo) => void) {
+    if (!classInfo) {
+      return;
+    }
+    for (let funcInfo of classInfo.memberFunctions) {
+      callbackFunc(funcInfo);
+    }
+    if (classInfo.baseClass !== "") {
+      this.forEachMacroClassFunction(this.findMacroClassInfo(classInfo.baseClass), callbackFunc);
+    }
+  }
+
+  // Calls the callback function for each of the class' events (including base classes)
+  forEachMacroClassEvent(classInfo: MacroClassCompletionInfo|undefined, callbackFunc: (event: string) => void) {
+    if (!classInfo) {
+      return;
+    }
+    for (let event of classInfo.events) {
+      callbackFunc(event);
+    }
+    if (classInfo.baseClass !== "") {
+      this.forEachMacroClassEvent(this.findMacroClassInfo(classInfo.baseClass), callbackFunc);
+    }
+  }
+
 
   addHelpFromFile(filePath: string) {
     // making sure each file is processed only once
@@ -89,6 +125,16 @@ export class HelpCompletionInfo {
       if (cl.FUNCTIONS && cl.FUNCTIONS.FUNCTION) {
         this.addMacroFunctions(cl.FUNCTIONS.FUNCTION, classInfo.memberFunctions);
       }
+      if (cl.EVENTS && cl.EVENTS.EVENT) {
+        if (Array.isArray(cl.EVENTS.EVENT)) {
+          for (let eventMarkup of cl.EVENTS.EVENT) {
+            classInfo.events.push(normalizeXmlValue(eventMarkup.NAME));
+          }
+        } else {
+          classInfo.events.push(normalizeXmlValue(cl.EVENTS.EVENT.NAME));
+        }
+      }
+      this.macroClassesMap.set(classInfo.name, this.macroClasses.length);
       this.macroClasses.push(classInfo);
     };
 
@@ -122,7 +168,7 @@ export class HelpCompletionInfo {
   }
 
   private addMacros(macros: any) {
-    if (macros.CLASES && macros.CLASSES.CLASS) {
+    if (macros.CLASSES && macros.CLASSES.CLASS) {
       this.addMacroClasses(macros.CLASSES.CLASS);
     }
     if (macros.FUNCTIONS && macros.FUNCTIONS.FUNCTION) {
