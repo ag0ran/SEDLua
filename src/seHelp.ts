@@ -78,6 +78,22 @@ export class HelpCompletionInfo {
     }
   }
 
+  findMacroClassFunction(classInfo: MacroClassCompletionInfo|undefined, funcName: string): MacroFuncCompletionInfo|undefined {
+    if (!classInfo) {
+      return;
+    }
+    for (let funcInfo of classInfo.memberFunctions) {
+      if (funcInfo.name === funcName) {
+        return funcInfo;
+      }
+    }
+    if (classInfo.baseClass !== "") {
+      return this.findMacroClassFunction(this.findMacroClassInfo(classInfo.baseClass), funcName);
+    }
+    return undefined;
+  }
+
+
   // Calls the callback function for each of the class' events (including base classes)
   forEachMacroClassEvent(classInfo: MacroClassCompletionInfo|undefined, callbackFunc: (event: string) => void) {
     if (!classInfo) {
@@ -89,6 +105,21 @@ export class HelpCompletionInfo {
     if (classInfo.baseClass !== "") {
       this.forEachMacroClassEvent(this.findMacroClassInfo(classInfo.baseClass), callbackFunc);
     }
+  }
+
+  findMacroClassEvent(classInfo: MacroClassCompletionInfo|undefined, eventName: string): string|undefined {
+    if (!classInfo) {
+      return;
+    }
+    for (let event of classInfo.events) {
+      if (event === eventName) {
+        return event;
+      }
+    }
+    if (classInfo.baseClass !== "") {
+      return this.findMacroClassEvent(this.findMacroClassInfo(classInfo.baseClass), eventName);
+    }
+    return undefined;
   }
 
 

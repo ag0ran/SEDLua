@@ -1,7 +1,7 @@
 let luaparse = require('./luaparse');
 import * as vscode from 'vscode';
 
-class VariableInfo {
+export class VariableInfo {
   constructor(varType?: string) {
     this.type = varType;
   }
@@ -55,6 +55,22 @@ export class DocumentCompletionInfo {
   ast: any;
   tokens: any[] = [];
   error: string|undefined;
+
+  getTokenIndexAtOffset(offset: number) : number {
+    for (let i = 0; i < this.tokens.length; i++) {
+      let token = this.tokens[i];
+      if (token.range[0] <= offset && offset <= token.range[1]) {
+        return i;
+      }
+      if (token.range[1] >= offset) {
+        return i - 1;
+      }
+    }
+    return this.tokens.length - 1;
+  }
+  getTokenByIndex(tokenIndex: number) : TokenInfo {
+    return new TokenInfo(this.tokens[tokenIndex]);
+  }
 
   getParseInfoAroundOffset(offset: number) : ParseInfo|undefined {
     let token2Before : any;

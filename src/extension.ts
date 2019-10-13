@@ -3,8 +3,10 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as seFilesystem from './sefilesystem';
-import {DocumentCompletionHandler, DocumentCompletionInfo, TokenInfo} from './documentCompletionHandler';
-import {HelpCompletionInfo, MacroFuncCompletionInfo, CvarFunctionCompletionInfo, CvarCompletionInfo} from './seHelp';
+import {DocumentCompletionHandler, DocumentCompletionInfo, TokenInfo, VariableInfo} from './documentCompletionHandler';
+import {HelpCompletionInfo, MacroFuncCompletionInfo, CvarFunctionCompletionInfo,
+  CvarCompletionInfo, MacroClassCompletionInfo} from './seHelp';
+import { stringify } from 'querystring';
 
 class SEDLua implements vscode.CompletionItemProvider {
   constructor(context: vscode.ExtensionContext) {
@@ -31,6 +33,34 @@ class SEDLua implements vscode.CompletionItemProvider {
     // registering as hover provider
     vscode.languages.registerHoverProvider("lua", this);
 
+    vscode.languages.registerSignatureHelpProvider("lua", this, "(");
+  }
+
+  provideSignatureHelp(document: vscode.TextDocument, position: vscode.Position,
+    token: vscode.CancellationToken, context: vscode.SignatureHelpContext): vscode.ProviderResult<vscode.SignatureHelp>
+  {
+    if (false) {
+      let signatureHelp = new vscode.SignatureHelp();
+      let signatureInformation = new vscode.SignatureInformation("GenerateRandomFloorPoints(param1, param2)");
+      signatureInformation.label = "GenerateRandomFloorPoints(INDEX param1, INDEX param2)";
+      signatureInformation.documentation = createCppMarkdownWithComment("BOOL GenerateRandomFloorPoints(param1, param2)", "Generates random points");
+      {
+        let param1 = new vscode.ParameterInformation("INDEX param1");
+        param1.documentation = createCppMarkdownWithComment("INDEX param1", "First parameter");
+        signatureInformation.parameters.push(param1);  
+      }
+      {
+        let param2 = new vscode.ParameterInformation("INDEX param2");
+        param2.documentation = createCppMarkdownWithComment("INDEX param2", "Second parameter");
+        signatureInformation.parameters.push(param2);  
+      }
+      signatureHelp.signatures.push(signatureInformation);
+      signatureHelp.activeSignature = 0;
+      signatureHelp.activeParameter = 0;
+      return signatureHelp;
+    } else {
+      return undefined;
+    }
   }
   
   provideHover(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken): vscode.ProviderResult<vscode.Hover> {
@@ -51,13 +81,109 @@ class SEDLua implements vscode.CompletionItemProvider {
     if (word === "") {
       return undefined;
     }
-    let variableInfo = completionInfo.variables.get(word);
-    if (variableInfo && variableInfo.type) {
-      let hover = new vscode.Hover(`${word} : ${variableInfo.type}`);
-      hover.range = wordRange;
-      return hover;
+
+    let offset = document.offsetAt(position);
+    let tokenIndexAtOffset = completionInfo.getTokenIndexAtOffset(offset);
+    if (tokenIndexAtOffset === -1) {
+      return undefined;
     }
-    return new vscode.Hover(word);
+    let tokenAtOffset = completionInfo.getTokenByIndex(tokenIndexAtOffset);
+    if (tokenAtOffset.type !== "Identifier") {
+      return undefined;
+    }
+    let tokenChain = [tokenAtOffset];
+    let lastTokenIndexing = false;
+    for (let tokenIndex = tokenIndexAtOffset - 1; tokenIndex >= 0; tokenIndex--) {
+      let token = completionInfo.getTokenByIndex(tokenIndex);
+      if (!lastTokenIndexing) {
+        if (isIndexingChar(token.value)) {
+          lastTokenIndexing = true;
+        } else {
+          break;
+        }
+      } else {
+        if (token.type !== "Identifier") {
+          break;
+        }
+        lastTokenIndexing = true;
+      }
+      tokenChain.push(token);
+    }
+
+    // going through the token chain in reverse and trying to index the chain up to current token
+    let lastInfo: MacroClassCompletionInfo|MacroFuncCompletionInfo|string|undefined;
+    let indexWhat: string|undefined;
+    while (tokenChain.length > 0) {
+      let token = tokenChain.pop();
+      if (!lastInfo) {
+        let variableInfo = completionInfo.variables.get(token!.value);
+        if (!variableInfo || !variableInfo.type) {
+          return undefined;
+        }
+        lastInfo = this.helpCompletionInfo.findMacroClassInfo(variableInfo.type);
+        if (!lastInfo) {
+          return undefined;
+        }
+      } else {
+        if (indexWhat) {
+          if (!(lastInfo instanceof MacroClassCompletionInfo)) {
+            return undefined;
+          }
+          if (token!.type !== "Identifier") {
+            return undefined;
+          }
+          if (indexWhat === "Event") {
+            let eventName = token!.value;
+            if (!this.helpCompletionInfo.findMacroClassEvent(lastInfo, eventName)) {
+              return undefined;
+            } else {
+                lastInfo = `Event ${lastInfo.name}.${eventName}`;
+              break;
+            }
+          } else if (indexWhat === "Function") {
+            let functionName = token!.value;
+            let funcInfo = this.helpCompletionInfo.findMacroClassFunction(lastInfo, functionName);
+            if (!funcInfo) {
+              return undefined;
+            } else {
+                lastInfo = funcInfo;
+              break;
+            }
+          } else {
+            return undefined;
+          }
+          indexWhat = undefined;
+        } else {
+          if (token!.value === ".") {
+            indexWhat = "Event";
+          } else if (token!.value === ":") {
+            indexWhat = "Function";
+          } else {
+            return undefined;
+          }
+        }
+      }
+    }
+
+    // we should have gone through all the tokens in the chain
+    if (tokenChain.length > 0) {
+      return undefined;
+    }
+
+    let hover: vscode.Hover|undefined;
+    if (lastInfo instanceof MacroClassCompletionInfo) {
+      hover = new vscode.Hover(`${word} : ${lastInfo.name}`);
+    } else if (lastInfo instanceof MacroFuncCompletionInfo) {
+      hover = new vscode.Hover(createCppMarkdownWithComment(getMacroFuncSignatureString(lastInfo),
+        lastInfo.briefComment || lastInfo.detailComment));
+    } else if (typeof(lastInfo) === "string") {
+      hover = new vscode.Hover(lastInfo);
+      return hover;
+    } else {
+      return undefined;
+    }
+    hover.range = wordRange;
+    return hover;
   }
 
   private async initWorkspace() {
@@ -243,7 +369,6 @@ class SEDLua implements vscode.CompletionItemProvider {
       } else {
         let indexedVarToken: TokenInfo|undefined;
         let indexingChar: string|undefined;
-        function isIndexingChar(char: string) {return char === '.' || char === ':';}
         function isIndexingToken(token: TokenInfo|undefined) {return token && isIndexingChar(token.value);}
         if (context.triggerCharacter && isIndexingChar(context.triggerCharacter)) {
           indexingChar = context.triggerCharacter;
@@ -340,7 +465,7 @@ class SEDLua implements vscode.CompletionItemProvider {
   }
 }
 
-function createCppMarkdownWithComment(cppCode: string, comment: string|undefined) {
+function createCppMarkdownWithComment(cppCode: string, comment?: string) {
   let md = new vscode.MarkdownString();
   md.appendCodeblock(cppCode, "c++");
   if (comment && comment !== "") {
@@ -371,10 +496,16 @@ function createMacroFuncCompletionItem(macroFunc: MacroFuncCompletionInfo) {
   const completionItem = new vscode.CompletionItem(macroFunc.name);
   completionItem.kind = vscode.CompletionItemKind.Function;
   completionItem.documentation =  completionItem.documentation = createCppMarkdownWithComment(
-    macroFunc.returnType + " " + macroFunc.name + "(" + macroFunc.params + ")",
+    getMacroFuncSignatureString(macroFunc),
     macroFunc.briefComment || macroFunc.detailComment);
   return completionItem;
 }
+
+function getMacroFuncSignatureString(macroFunc: MacroFuncCompletionInfo) {
+  return macroFunc.returnType + " " + macroFunc.name + "(" + macroFunc.params + ")";
+}
+
+function isIndexingChar(char: string) {return char === '.' || char === ':';}
 
 // Called when extension is first activated.
 export function activate(context: vscode.ExtensionContext) {
