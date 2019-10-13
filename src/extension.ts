@@ -321,7 +321,6 @@ class SEDLua implements vscode.CompletionItemProvider {
     for (const func of completionInfo.functions) {
       const funcCompletionItem = new vscode.CompletionItem(func);
       funcCompletionItem.kind = vscode.CompletionItemKind.Function;
-      funcCompletionItem.insertText = func + "()";
       funcCompletionItem.documentation = "This is the " + func + " function. Documentation coming soon";
       funcAndVarCompletionItems.push(funcCompletionItem);
     }
@@ -339,7 +338,6 @@ class SEDLua implements vscode.CompletionItemProvider {
       varCompletionItem.kind = vscode.CompletionItemKind.Function;
       varCompletionItem.detail = cvarFunc.attributes + " cvar " + cvarFunc.returnType + " " + cvarFunc.name + "(" + cvarFunc.params + ") ";
       varCompletionItem.documentation = cvarFunc.briefComment || cvarFunc.detailComment;
-      varCompletionItem.insertText = cvarFunc.name + "()";
       funcAndVarCompletionItems.push(varCompletionItem);
     }
 
@@ -357,7 +355,6 @@ function createMacroFuncCompletionItem(macroFunc: MacroFuncCompletionInfo) {
   varCompletionItem.kind = vscode.CompletionItemKind.Function;
   varCompletionItem.detail = macroFunc.returnType + " " + macroFunc.name + "(" + macroFunc.params + ") ";
   varCompletionItem.documentation = macroFunc.briefComment || macroFunc.detailComment;
-  varCompletionItem.insertText = macroFunc.name + "()";
   return varCompletionItem;
 }
 
