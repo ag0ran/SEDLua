@@ -4,7 +4,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as seFilesystem from './sefilesystem';
 import {DocumentCompletionHandler, DocumentCompletionInfo, TokenInfo} from './documentCompletionHandler';
-import {HelpCompletionInfo, MacroFuncCompletionInfo} from './seHelp';
+import {HelpCompletionInfo, MacroFuncCompletionInfo, CvarFunctionCompletionInfo, CvarCompletionInfo} from './seHelp';
 
 class SEDLua implements vscode.CompletionItemProvider {
   constructor(context: vscode.ExtensionContext) {
@@ -211,9 +211,8 @@ class SEDLua implements vscode.CompletionItemProvider {
     for (const macroClass of this.helpCompletionInfo.macroClasses) {
       let classCompletionItem = new vscode.CompletionItem(macroClass.name);
       classCompletionItem.kind = vscode.CompletionItemKind.Class;
-      classCompletionItem.documentation = new vscode.MarkdownString(
-        `class \`${macroClass.name}\`\n\n${macroClass.briefComment}`);
-      // (adding a space after the ':' if not there already)
+      classCompletionItem.documentation = createCppMarkdownWithComment(`class ${macroClass.name}`, macroClass.briefComment);
+      // (space will be inserted after the ':' if not there already)
       classCompletionItem.insertText = lastMatchString[lastMatchString.length - 1] === ':' ? " " + macroClass.name : macroClass.name;
       classCompletionItems.push(classCompletionItem);
     }
@@ -326,36 +325,55 @@ class SEDLua implements vscode.CompletionItemProvider {
     }
 
     for (let cvar of this.helpCompletionInfo.cvars) {
-      const varCompletionItem = new vscode.CompletionItem(cvar.name);
-      varCompletionItem.kind = vscode.CompletionItemKind.Variable;
-      varCompletionItem.detail = cvar.attributes + " cvar " + cvar.type;
-      varCompletionItem.documentation = cvar.briefComment || cvar.detailComment;
-      funcAndVarCompletionItems.push(varCompletionItem);
+      funcAndVarCompletionItems.push(createCvarCompletionItem(cvar));
     }
 
     for (let cvarFunc of this.helpCompletionInfo.cvarFunctions) {
-      const varCompletionItem = new vscode.CompletionItem(cvarFunc.name);
-      varCompletionItem.kind = vscode.CompletionItemKind.Function;
-      varCompletionItem.detail = cvarFunc.attributes + " cvar " + cvarFunc.returnType + " " + cvarFunc.name + "(" + cvarFunc.params + ") ";
-      varCompletionItem.documentation = cvarFunc.briefComment || cvarFunc.detailComment;
-      funcAndVarCompletionItems.push(varCompletionItem);
+      funcAndVarCompletionItems.push(createCvarFuncCompletionItem(cvarFunc));
     }
 
     for (let macroFunc of this.helpCompletionInfo.macroFunctions) {
-      const varCompletionItem = createMacroFuncCompletionItem(macroFunc);
-      funcAndVarCompletionItems.push(varCompletionItem);
+      funcAndVarCompletionItems.push(createMacroFuncCompletionItem(macroFunc));
     }
 
     return funcAndVarCompletionItems;
   }
 }
 
+function createCppMarkdownWithComment(cppCode: string, comment: string|undefined) {
+  let md = new vscode.MarkdownString();
+  md.appendCodeblock(cppCode, "c++");
+  if (comment && comment !== "") {
+    md.appendMarkdown("***");
+    md.appendText("\n" + comment);
+  }
+  return md;
+}
+
+function createCvarCompletionItem(cvar: CvarCompletionInfo) {
+  const completionItem = new vscode.CompletionItem(cvar.name);
+  completionItem.kind = vscode.CompletionItemKind.Function;
+  completionItem.documentation = createCppMarkdownWithComment(
+    cvar.attributes + " cvar " + cvar.type + " " + cvar.name, cvar.briefComment || cvar.detailComment);
+  return completionItem;
+}
+
+function createCvarFuncCompletionItem(cvarFunc: CvarFunctionCompletionInfo) {
+  const completionItem = new vscode.CompletionItem(cvarFunc.name);
+  completionItem.kind = vscode.CompletionItemKind.Function;
+  completionItem.documentation = createCppMarkdownWithComment(
+    cvarFunc.attributes + " cvar " + cvarFunc.returnType + " " + cvarFunc.name + "(" + cvarFunc.params + ") ",
+    cvarFunc.briefComment || cvarFunc.detailComment);
+  return completionItem;
+}
+
 function createMacroFuncCompletionItem(macroFunc: MacroFuncCompletionInfo) {
-  const varCompletionItem = new vscode.CompletionItem(macroFunc.name);
-  varCompletionItem.kind = vscode.CompletionItemKind.Function;
-  varCompletionItem.detail = macroFunc.returnType + " " + macroFunc.name + "(" + macroFunc.params + ") ";
-  varCompletionItem.documentation = macroFunc.briefComment || macroFunc.detailComment;
-  return varCompletionItem;
+  const completionItem = new vscode.CompletionItem(macroFunc.name);
+  completionItem.kind = vscode.CompletionItemKind.Function;
+  completionItem.documentation =  completionItem.documentation = createCppMarkdownWithComment(
+    macroFunc.returnType + " " + macroFunc.name + "(" + macroFunc.params + ")",
+    macroFunc.briefComment || macroFunc.detailComment);
+  return completionItem;
 }
 
 // Called when extension is first activated.
