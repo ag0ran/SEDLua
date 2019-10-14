@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<HELP>
+<MACROS>
+<CLASSES>
+  <CLASS>
+    <NAME>CDerivedSampleClass</NAME>
+    <BASE_CLASS>CSampleClass</BASE_CLASS>
+    <SOURCE>Sources/Sample/DerivedSampleClass.h</SOURCE>
+    <COMMENT>Derived sample class is very useful for various purposes. Use it at your own risk though</COMMENT>
+    <EVENTS>
+      <EVENT>
+        <NAME>DerivedEvent0</NAME>
+      </EVENT>
+      <EVENT>
+        <NAME>DerivedEvent1</NAME>
+      </EVENT>
+    </EVENTS>
+    <FUNCTIONS>
+      <FUNCTION>
+        <NAME>GetBaseClass</NAME>
+        <BRIEF_COMMENT>Returns base class of this class. Always works</BRIEF_COMMENT>
+        <DETAIL_COMMENT></DETAIL_COMMENT>
+        <PARAMS>INDEX iNumberOfLevels, const CHAR *szByName</PARAMS>
+        <RETURN>CSampleClass</RETURN>
+      </FUNCTION>
+      <FUNCTION>
+        <NAME>AcceptLotsOfParams</NAME>
+        <BRIEF_COMMENT></BRIEF_COMMENT>
+        <DETAIL_COMMENT>This function really takes a lot of params. It will take a long time to write them.</DETAIL_COMMENT>
+        <PARAMS>INDEX iParam1, CString iParam2, CSampleClass *pscParam3, Handle&lt;CDerivedSampleClass&gt; hscParam4, const Vector3f&amp; vParam5</PARAMS>
+        <RETURN>CDerivedSampleClass*</RETURN>
+      </FUNCTION>
+    </FUNCTIONS>
+  </CLASS>
+  <CLASS>
+    <NAME>CSampleClass</NAME>
+    <BASE_CLASS></BASE_CLASS>
+    <SOURCE>Sources/Sample/SampleClass.h</SOURCE>
+    <COMMENT>Sample class can be used on its own but also as a base class for various derived classes.</COMMENT>
+    <EVENTS>
+      <EVENT>
+        <NAME>Event0</NAME>
+      </EVENT>
+      <EVENT>
+        <NAME>Event1</NAME>
+      </EVENT>
+    </EVENTS>
+    <FUNCTIONS>
+      <FUNCTION>
+        <NAME>GetName</NAME>
+        <BRIEF_COMMENT>Returns object name.</BRIEF_COMMENT>
+        <DETAIL_COMMENT></DETAIL_COMMENT>
+        <PARAMS></PARAMS>
+        <RETURN>CString</RETURN>
+      </FUNCTION>
+      <FUNCTION>
+        <NAME>GetSubobject</NAME>
+        <BRIEF_COMMENT></BRIEF_COMMENT>
+        <DETAIL_COMMENT>Returns subobject that is of type derived class.</DETAIL_COMMENT>
+        <PARAMS>IDENT idObject, INDEX iObject</PARAMS>
+        <RETURN>CDerivedSampleClass*</RETURN>
+      </FUNCTION>
+    </FUNCTIONS>
+  </CLASS>
+  <FUNCTIONS>
+    <FUNCTION>
+    <NAME>tstGetSampleObject</NAME>
+    <SOURCE>Sources/Sample/SampleClass.h</SOURCE>
+    <BRIEF_COMMENT></BRIEF_COMMENT>
+    <DETAIL_COMMENT></DETAIL_COMMENT>
+    <PARAMS>IDENT idObject</PARAMS>
+    <RETURN>Handle&lt;CSampleClass&gt;</RETURN>
+  </FUNCTION>
+  <FUNCTIONS>
+    <FUNCTION>
+    <NAME>tstGetDerivedSampleObject</NAME>
+    <SOURCE>Sources/Sample/DerivedSampleClass.h</SOURCE>
+    <BRIEF_COMMENT></BRIEF_COMMENT>
+    <DETAIL_COMMENT></DETAIL_COMMENT>
+    <PARAMS>IDENT idObject</PARAMS>
+    <RETURN>CDerivedSampleClass*</RETURN>
+  </FUNCTION>
+  <FUNCTIONS>
+    <FUNCTION>
+    <NAME>tstDestroySampleObject</NAME>
+    <SOURCE>Sources/Sample/SampleClass.h</SOURCE>
+    <BRIEF_COMMENT></BRIEF_COMMENT>
+    <DETAIL_COMMENT></DETAIL_COMMENT>
+    <PARAMS>CSampleClass *pscObject</PARAMS>
+    <RETURN>void</RETURN>
+  </FUNCTION>
+</FUNCTIONS>
+</MACROS>
+</HELP>

@@ -108,6 +108,12 @@ export class DocumentCompletionHandler {
     }
     return this.currentCompletionInfo;
   }
+  async getCompletionInfoNow(): Promise<DocumentCompletionInfo|undefined> {
+    if (this.currentAsyncParsing) {
+      await this.currentAsyncParsing;
+    }
+    return this.currentCompletionInfo;
+  }
   getLastError(): string {
     return this.lastError;
   }
