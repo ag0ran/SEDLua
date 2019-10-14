@@ -122,6 +122,14 @@ export class HelpCompletionInfo {
     return undefined;
   }
 
+  findCvarFuncInfo(funcName: string): CvarFunctionCompletionInfo|undefined {
+    return this.cvarFunctions.find((funcInfo) => funcInfo.name === funcName);
+  }
+
+  findMacroFuncInfo(funcName: string): MacroFuncCompletionInfo|undefined {
+    return this.macroFunctions.find((funcInfo) => funcInfo.name === funcName);
+  }
+
 
   addHelpFromFile(filePath: string) {
     // making sure each file is processed only once

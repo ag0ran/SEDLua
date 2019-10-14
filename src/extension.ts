@@ -111,16 +111,22 @@ class SEDLua implements vscode.CompletionItemProvider {
     }
 
     // going through the token chain in reverse and trying to index the chain up to current token
-    let lastInfo: MacroClassCompletionInfo|MacroFuncCompletionInfo|string|undefined;
+    let lastInfo: MacroClassCompletionInfo|MacroFuncCompletionInfo|CvarFunctionCompletionInfo|string|undefined;
     let indexWhat: string|undefined;
     while (tokenChain.length > 0) {
       let token = tokenChain.pop();
       if (!lastInfo) {
         let variableInfo = completionInfo.variables.get(token!.value);
-        if (!variableInfo || !variableInfo.type) {
-          return undefined;
+        if (variableInfo && variableInfo.type) {
+          lastInfo = this.helpCompletionInfo.findMacroClassInfo(variableInfo.type);
         }
-        lastInfo = this.helpCompletionInfo.findMacroClassInfo(variableInfo.type);
+        if (!lastInfo) {
+          lastInfo = this.helpCompletionInfo.findCvarFuncInfo(token!.value);
+          if (!lastInfo) {
+            lastInfo = this.helpCompletionInfo.findMacroFuncInfo(token!.value);
+          }
+        }
+        
         if (!lastInfo) {
           return undefined;
         }
@@ -179,6 +185,9 @@ class SEDLua implements vscode.CompletionItemProvider {
     } else if (typeof(lastInfo) === "string") {
       hover = new vscode.Hover(lastInfo);
       return hover;
+    } else if (lastInfo instanceof CvarFunctionCompletionInfo) {
+      hover = new vscode.Hover(createCppMarkdownWithComment(getCvarFuncSignatureString(lastInfo),
+        lastInfo.briefComment || lastInfo.detailComment));
     } else {
       return undefined;
     }
@@ -487,7 +496,7 @@ function createCvarFuncCompletionItem(cvarFunc: CvarFunctionCompletionInfo) {
   const completionItem = new vscode.CompletionItem(cvarFunc.name);
   completionItem.kind = vscode.CompletionItemKind.Function;
   completionItem.documentation = createCppMarkdownWithComment(
-    cvarFunc.attributes + " cvar " + cvarFunc.returnType + " " + cvarFunc.name + "(" + cvarFunc.params + ") ",
+    getCvarFuncSignatureString(cvarFunc),
     cvarFunc.briefComment || cvarFunc.detailComment);
   return completionItem;
 }
@@ -499,6 +508,10 @@ function createMacroFuncCompletionItem(macroFunc: MacroFuncCompletionInfo) {
     getMacroFuncSignatureString(macroFunc),
     macroFunc.briefComment || macroFunc.detailComment);
   return completionItem;
+}
+
+function getCvarFuncSignatureString(cvarFunc: CvarFunctionCompletionInfo) {
+  return cvarFunc.attributes + " cvar " + cvarFunc.returnType + " " + cvarFunc.name + "(" + cvarFunc.params + ") ";
 }
 
 function getMacroFuncSignatureString(macroFunc: MacroFuncCompletionInfo) {
