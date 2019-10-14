@@ -374,7 +374,10 @@ class SEDLua implements vscode.CompletionItemProvider {
       // in comment we can auto complete a type definition (<identifier> : <macro class name>)
       if (currentParseInfo.token0 && currentParseInfo.token0.type === "Comment"
           || currentParseInfo.token1Before && currentParseInfo.token1Before.type === "Comment") {
-        return this.provideCommentCompletionItems(document, position, token, context);
+        let commentCompletionItems = this.provideCommentCompletionItems(document, position, token, context);
+        if (commentCompletionItems) {
+          return commentCompletionItems;
+        }
       } else {
         let indexedVarToken: TokenInfo|undefined;
         let indexingChar: string|undefined;
