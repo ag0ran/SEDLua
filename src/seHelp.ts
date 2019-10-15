@@ -59,7 +59,7 @@ export class HelpCompletionInfo {
 
   findMacroClassInfo(className: string): MacroClassCompletionInfo|undefined {
     let macroClassIndex = this.macroClassesMap.get(className);
-    if (!macroClassIndex) {
+    if (macroClassIndex === undefined) {
       return undefined;
     }
     return this.macroClasses[macroClassIndex];

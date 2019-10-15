@@ -83,98 +83,11 @@ class SEDLua implements vscode.CompletionItemProvider {
     }
 
     let offset = document.offsetAt(position);
-    let tokenIndexAtOffset = completionInfo.getTokenIndexAtOffset(offset);
-    if (tokenIndexAtOffset === -1) {
+    let iTokenAtOffset = completionInfo.getTokenIndexAtOffset(offset);
+    if (iTokenAtOffset === -1) {
       return undefined;
     }
-    let tokenAtOffset = completionInfo.getTokenByIndex(tokenIndexAtOffset);
-    if (tokenAtOffset.type !== "Identifier") {
-      return undefined;
-    }
-    let tokenChain = [tokenAtOffset];
-    let lastTokenIndexing = false;
-    for (let tokenIndex = tokenIndexAtOffset - 1; tokenIndex >= 0; tokenIndex--) {
-      let token = completionInfo.getTokenByIndex(tokenIndex);
-      if (!lastTokenIndexing) {
-        if (isIndexingChar(token.value)) {
-          lastTokenIndexing = true;
-        } else {
-          break;
-        }
-      } else {
-        if (token.type !== "Identifier") {
-          break;
-        }
-        lastTokenIndexing = true;
-      }
-      tokenChain.push(token);
-    }
-
-    // going through the token chain in reverse and trying to index the chain up to current token
-    let lastInfo: MacroClassCompletionInfo|MacroFuncCompletionInfo|CvarFunctionCompletionInfo|string|undefined;
-    let indexWhat: string|undefined;
-    while (tokenChain.length > 0) {
-      let token = tokenChain.pop();
-      if (!lastInfo) {
-        let variableInfo = completionInfo.variables.get(token!.value);
-        if (variableInfo && variableInfo.type) {
-          lastInfo = this.helpCompletionInfo.findMacroClassInfo(variableInfo.type);
-        }
-        if (!lastInfo) {
-          lastInfo = this.helpCompletionInfo.findCvarFuncInfo(token!.value);
-          if (!lastInfo) {
-            lastInfo = this.helpCompletionInfo.findMacroFuncInfo(token!.value);
-          }
-        }
-        
-        if (!lastInfo) {
-          return undefined;
-        }
-      } else {
-        if (indexWhat) {
-          if (!(lastInfo instanceof MacroClassCompletionInfo)) {
-            return undefined;
-          }
-          if (token!.type !== "Identifier") {
-            return undefined;
-          }
-          if (indexWhat === "Event") {
-            let eventName = token!.value;
-            if (!this.helpCompletionInfo.findMacroClassEvent(lastInfo, eventName)) {
-              return undefined;
-            } else {
-                lastInfo = `Event ${lastInfo.name}.${eventName}`;
-              break;
-            }
-          } else if (indexWhat === "Function") {
-            let functionName = token!.value;
-            let funcInfo = this.helpCompletionInfo.findMacroClassFunction(lastInfo, functionName);
-            if (!funcInfo) {
-              return undefined;
-            } else {
-                lastInfo = funcInfo;
-              break;
-            }
-          } else {
-            return undefined;
-          }
-          indexWhat = undefined;
-        } else {
-          if (token!.value === ".") {
-            indexWhat = "Event";
-          } else if (token!.value === ":") {
-            indexWhat = "Function";
-          } else {
-            return undefined;
-          }
-        }
-      }
-    }
-
-    // we should have gone through all the tokens in the chain
-    if (tokenChain.length > 0) {
-      return undefined;
-    }
+    let lastInfo = completionInfo.resolveIndexingExpressionAtToken(iTokenAtOffset, this.helpCompletionInfo);
 
     let hover: vscode.Hover|undefined;
     if (lastInfo instanceof MacroClassCompletionInfo) {

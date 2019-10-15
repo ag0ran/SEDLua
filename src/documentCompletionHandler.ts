@@ -1,5 +1,6 @@
 let luaparse = require('./luaparse');
 import * as vscode from 'vscode';
+import { MacroFuncCompletionInfo, CvarFunctionCompletionInfo, MacroClassCompletionInfo, HelpCompletionInfo } from './seHelp';
 
 export class VariableInfo {
   constructor(varType?: string) {
@@ -94,6 +95,153 @@ export class DocumentCompletionInfo {
       return parseInfo;
     }
     return undefined;
+  }
+
+  // Tries to find a function call of a know function at given offset. Returns the function info and the current parameter index if function is found.
+  getFunctionCallInfoAtOffset(offset: number, helpCompletionInfo: HelpCompletionInfo):
+    [MacroFuncCompletionInfo|CvarFunctionCompletionInfo, number]|undefined
+  {
+    // go through the tokens starting at the current offset, trying to find opening '(' character preceeded by a known function
+    let iTokenAtOffset = this.getTokenIndexAtOffset(offset);
+    if (iTokenAtOffset === -1) {
+      return undefined;
+    }
+    let bracketCounter = 0;
+    let parameter = 0;
+    let potentialCallStartFound = false;
+    let iCurrentToken = iTokenAtOffset;
+    for ( ; iCurrentToken >= 0; --iCurrentToken) {
+      let currentToken = this.tokens[iCurrentToken];
+      // skip tokens inside nested calls
+      if (bracketCounter > 0) {
+        if (currentToken.value === '(') {
+          bracketCounter--;
+        }
+        continue;
+      }
+      // detecting nested function calls
+      if (currentToken.value === ')') {
+        bracketCounter++;
+        continue;
+      }
+      if (currentToken.value === ',') {
+        parameter++;
+        continue;
+      }
+      if (currentToken.value === '(') {
+        potentialCallStartFound = true;
+        break;
+      }
+    }
+    if (!potentialCallStartFound || iCurrentToken <= 0) {
+      return undefined;
+    }
+    // try to resolve indexing expression starting at the token before the call start
+    let expressionBeforeInfo = this.resolveIndexingExpressionAtToken(iCurrentToken - 1, helpCompletionInfo);
+    if (!expressionBeforeInfo) {
+      return undefined;
+    }
+
+    if (expressionBeforeInfo instanceof MacroFuncCompletionInfo
+        || expressionBeforeInfo instanceof CvarFunctionCompletionInfo) {
+      return [expressionBeforeInfo, parameter];
+    } else {
+      return undefined;
+    }
+  }
+
+  resolveIndexingExpressionAtToken(iStartingToken: number, helpCompletionInfo: HelpCompletionInfo):
+    MacroFuncCompletionInfo|CvarFunctionCompletionInfo|MacroClassCompletionInfo|string|undefined
+  {
+    let startingToken = this.tokens[iStartingToken];
+    if (startingToken.type !== luaparse.tokenTypes.Identifier) {
+      return undefined;
+    }
+    let tokenChain = [startingToken];
+    let lastTokenIndexing = false;
+    for (let iToken = iStartingToken - 1; iToken >= 0; iToken--) {
+      let token = this.tokens[iToken];
+      if (!lastTokenIndexing) {
+        if (isIndexingChar(token.value)) {
+          lastTokenIndexing = true;
+        } else {
+          break;
+        }
+      } else {
+        if (token.type !== luaparse.tokenTypes.Identifier) {
+          break;
+        }
+        lastTokenIndexing = false;
+      }
+      tokenChain.push(token);
+    }
+
+    // going through the token chain in reverse and trying to index the chain up to current token
+    let lastInfo: MacroClassCompletionInfo|MacroFuncCompletionInfo|CvarFunctionCompletionInfo|string|undefined;
+    let indexWhat: string|undefined;
+    while (tokenChain.length > 0) {
+      let token = tokenChain.pop();
+      if (!lastInfo) {
+        let variableInfo = this.variables.get(token!.value);
+        if (variableInfo && variableInfo.type) {
+          lastInfo = helpCompletionInfo.findMacroClassInfo(variableInfo.type);
+        }
+        if (!lastInfo) {
+          lastInfo = helpCompletionInfo.findCvarFuncInfo(token!.value);
+          if (!lastInfo) {
+            lastInfo = helpCompletionInfo.findMacroFuncInfo(token!.value);
+          }
+        }
+        
+        if (!lastInfo) {
+          return undefined;
+        }
+      } else {
+        if (indexWhat) {
+          if (!(lastInfo instanceof MacroClassCompletionInfo)) {
+            return undefined;
+          }
+          if (token!.type !== luaparse.tokenTypes.Identifier) {
+            return undefined;
+          }
+          if (indexWhat === "Event") {
+            let eventName = token!.value;
+            if (!helpCompletionInfo.findMacroClassEvent(lastInfo, eventName)) {
+              return undefined;
+            } else {
+                lastInfo = `Event ${lastInfo.name}.${eventName}`;
+              break;
+            }
+          } else if (indexWhat === "Function") {
+            let functionName = token!.value;
+            let funcInfo = helpCompletionInfo.findMacroClassFunction(lastInfo, functionName);
+            if (!funcInfo) {
+              return undefined;
+            } else {
+                lastInfo = funcInfo;
+              break;
+            }
+          } else {
+            return undefined;
+          }
+          indexWhat = undefined;
+        } else {
+          if (token!.value === ".") {
+            indexWhat = "Event";
+          } else if (token!.value === ":") {
+            indexWhat = "Function";
+          } else {
+            return undefined;
+          }
+        }
+      }
+    }
+
+    // we should have gone through all the tokens in the chain
+    if (tokenChain.length > 0) {
+      return undefined;
+    }
+    return lastInfo;
   }
 }
 
@@ -218,3 +366,5 @@ export class DocumentCompletionHandler {
   private currentAsyncParsing: Promise<DocumentCompletionInfo>|undefined = undefined;
   private lastError: string = "";
 }
+
+function isIndexingChar(char: string) {return char === '.' || char === ':';}

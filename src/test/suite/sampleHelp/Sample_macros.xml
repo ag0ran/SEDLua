@@ -62,8 +62,9 @@
       </FUNCTION>
     </FUNCTIONS>
   </CLASS>
-  <FUNCTIONS>
-    <FUNCTION>
+</CLASSES>
+<FUNCTIONS>
+  <FUNCTION>
     <NAME>tstGetSampleObject</NAME>
     <SOURCE>Sources/Sample/SampleClass.h</SOURCE>
     <BRIEF_COMMENT></BRIEF_COMMENT>
@@ -71,8 +72,7 @@
     <PARAMS>IDENT idObject</PARAMS>
     <RETURN>Handle&lt;CSampleClass&gt;</RETURN>
   </FUNCTION>
-  <FUNCTIONS>
-    <FUNCTION>
+  <FUNCTION>
     <NAME>tstGetDerivedSampleObject</NAME>
     <SOURCE>Sources/Sample/DerivedSampleClass.h</SOURCE>
     <BRIEF_COMMENT></BRIEF_COMMENT>
@@ -80,8 +80,7 @@
     <PARAMS>IDENT idObject</PARAMS>
     <RETURN>CDerivedSampleClass*</RETURN>
   </FUNCTION>
-  <FUNCTIONS>
-    <FUNCTION>
+  <FUNCTION>
     <NAME>tstDestroySampleObject</NAME>
     <SOURCE>Sources/Sample/SampleClass.h</SOURCE>
     <BRIEF_COMMENT></BRIEF_COMMENT>
