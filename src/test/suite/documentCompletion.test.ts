@@ -21,7 +21,7 @@ function replaceOutWithSrc(inPath: string)
 async function testDocumentParsing() {
   try {
     test('Opening document', async function() {
-      let sampleScriptPath = replaceOutWithSrc(__dirname) + "SampleLuaScript.lua";
+      let sampleScriptPath = replaceOutWithSrc(__dirname) + "sampleScripts/SampleLuaScript.lua";
       let sampleScriptUri = vscode.Uri.file(sampleScriptPath);
       let textDocument = await vscode.workspace.openTextDocument(sampleScriptUri);  
       assert(textDocument, "Unable to open document");
