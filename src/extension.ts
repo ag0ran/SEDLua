@@ -39,28 +39,41 @@ class SEDLua implements vscode.CompletionItemProvider {
   provideSignatureHelp(document: vscode.TextDocument, position: vscode.Position,
     token: vscode.CancellationToken, context: vscode.SignatureHelpContext): vscode.ProviderResult<vscode.SignatureHelp>
   {
-    if (false) {
-      let signatureHelp = new vscode.SignatureHelp();
-      let signatureInformation = new vscode.SignatureInformation("GenerateRandomFloorPoints(param1, param2)");
-      signatureInformation.label = "GenerateRandomFloorPoints(INDEX param1, INDEX param2)";
-      signatureInformation.documentation = createCppMarkdownWithComment("BOOL GenerateRandomFloorPoints(param1, param2)", "Generates random points");
-      {
-        let param1 = new vscode.ParameterInformation("INDEX param1");
-        param1.documentation = createCppMarkdownWithComment("INDEX param1", "First parameter");
-        signatureInformation.parameters.push(param1);  
-      }
-      {
-        let param2 = new vscode.ParameterInformation("INDEX param2");
-        param2.documentation = createCppMarkdownWithComment("INDEX param2", "Second parameter");
-        signatureInformation.parameters.push(param2);  
-      }
-      signatureHelp.signatures.push(signatureInformation);
-      signatureHelp.activeSignature = 0;
-      signatureHelp.activeParameter = 0;
-      return signatureHelp;
+    let completionInfo = this.getDocumentCompletionInfo(document);
+    if (!completionInfo) {
+      return undefined;
+    }
+
+    let offset = document.offsetAt(position);
+    let functionCallInfo = completionInfo.getFunctionCallInfoAtOffset(offset, this.helpCompletionInfo);
+    if (!functionCallInfo) {
+      return undefined;
+    }
+    let [funcInfo, iParam] = functionCallInfo;
+
+    let signatureHelp = new vscode.SignatureHelp();
+    let funcSignatureString: string|undefined;
+    if (funcInfo instanceof MacroFuncCompletionInfo) {
+      funcSignatureString = getMacroFuncSignatureString(funcInfo);
+    } else if (funcInfo instanceof CvarFunctionCompletionInfo) {
+      funcSignatureString = getCvarFuncSignatureString(funcInfo);
     } else {
       return undefined;
     }
+    let signatureInformation = new vscode.SignatureInformation(funcSignatureString);
+    signatureInformation.label = funcSignatureString;
+    signatureInformation.documentation = createCppMarkdownWithComment(funcSignatureString, funcInfo.briefComment || funcInfo.detailComment);
+    signatureHelp.signatures.push(signatureInformation);
+
+    let paramString = extractParamByIndex(funcInfo.params, iParam);
+    if (paramString) {
+      let param1 = new vscode.ParameterInformation(paramString);
+      param1.documentation = createCppMarkdownWithComment(paramString);
+      signatureInformation.parameters.push(param1);  
+    }
+    signatureHelp.activeSignature = 0;
+    signatureHelp.activeParameter = 0;
+    return signatureHelp;
   }
   
   provideHover(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken): vscode.ProviderResult<vscode.Hover> {
@@ -435,6 +448,18 @@ function getMacroFuncSignatureString(macroFunc: MacroFuncCompletionInfo) {
 }
 
 function isIndexingChar(char: string) {return char === '.' || char === ':';}
+
+function extractParamByIndex(params: string, iParam: number): string|undefined {
+  let allParams = params.split(",");
+  if (allParams.length === 0 || iParam >= allParams.length || iParam < 0) {
+    return undefined;
+  }
+  let param = allParams[iParam].trim();
+  if (param === "void") {
+    return undefined;
+  }
+  return param;
+}
 
 // Called when extension is first activated.
 export function activate(context: vscode.ExtensionContext) {
