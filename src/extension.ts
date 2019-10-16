@@ -64,11 +64,7 @@ class SEDLua implements vscode.CompletionItemProvider {
   }
   
   provideHover(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken): vscode.ProviderResult<vscode.Hover> {
-    let completionHandler = this.getOrCreateDocumentCompletionHandler(document);
-    if (!completionHandler) {
-      return undefined;
-    }
-    let completionInfo = completionHandler.getCompletionInfo();
+    let completionInfo = this.getDocumentCompletionInfo(document);
     if (!completionInfo) {
       return undefined;
     }
@@ -127,6 +123,14 @@ class SEDLua implements vscode.CompletionItemProvider {
 
     this.helpCompletionInfo = new HelpCompletionInfo();
     SEDLua.collectHelpFiles(this.helpCompletionInfo);
+  }
+
+  private getDocumentCompletionInfo(document: vscode.TextDocument): DocumentCompletionInfo|undefined {
+    let documentCompletionHandler = this.getOrCreateDocumentCompletionHandler(document);
+    if (documentCompletionHandler) {
+      return documentCompletionHandler.getCompletionInfo();
+    }
+    return undefined;
   }
 
   private getOrCreateDocumentCompletionHandler(document: vscode.TextDocument): DocumentCompletionHandler|undefined {
@@ -271,11 +275,7 @@ class SEDLua implements vscode.CompletionItemProvider {
       token: vscode.CancellationToken, context: vscode.CompletionContext
       ): vscode.ProviderResult<vscode.CompletionItem[] | vscode.CompletionList> {
 
-    let completionHandler = this.getOrCreateDocumentCompletionHandler(document);
-    if (!completionHandler) {
-      return;
-    }
-    let completionInfo = completionHandler.getCompletionInfo();
+    let completionInfo = this.getDocumentCompletionInfo(document);
     if (!completionInfo) {
       return null;
     }
