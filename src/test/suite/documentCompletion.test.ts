@@ -23,7 +23,7 @@ async function testDocumentParsing() {
   try {
     test('Opening document', async function() {
       let baseTestPath = replaceOutWithSrc(__dirname);
-      let sampleScriptPath = baseTestPath + "sampleScripts/SampleLuaScript.lua";
+      let sampleScriptPath = baseTestPath + "sampleScripts/SignatureTestScript.lua";
       let sampleScriptUri = vscode.Uri.file(sampleScriptPath);
       let textDocument = await vscode.workspace.openTextDocument(sampleScriptUri);  
       assert(textDocument, "Unable to open document");
@@ -48,8 +48,49 @@ async function testDocumentParsing() {
         if (functionCallInfo) {
           let [funcInfo, parameter] = functionCallInfo;
           assert(funcInfo instanceof MacroFuncCompletionInfo);
+          assert(funcInfo.name === "AcceptLotsOfParams");
           assert(parameter === 1);
         }
+      }
+
+      {
+        let functionCallInfo = completionInfo.getFunctionCallInfoAtOffset(textDocument.offsetAt(new vscode.Position(5, 27)), helpCompletionInfo);
+        assert(functionCallInfo);
+        if (functionCallInfo) {
+          let [funcInfo, parameter] = functionCallInfo;
+          assert(funcInfo instanceof MacroFuncCompletionInfo);
+          assert(funcInfo.name === "tstGetSampleObject");
+          assert(parameter === 0);
+        }
+      }
+      {
+        let functionCallInfo = completionInfo.getFunctionCallInfoAtOffset(textDocument.offsetAt(new vscode.Position(6, 31)), helpCompletionInfo);
+        assert(functionCallInfo);
+        if (functionCallInfo) {
+          let [funcInfo, parameter] = functionCallInfo;
+          assert(funcInfo instanceof MacroFuncCompletionInfo);
+          assert(funcInfo.name === "tstGetSampleObject");
+          assert(parameter === 0);
+        }
+      }
+      {
+        let functionCallInfo = completionInfo.getFunctionCallInfoAtOffset(textDocument.offsetAt(new vscode.Position(5, 11)), helpCompletionInfo);
+        assert(!functionCallInfo);
+      }
+
+      {
+        let functionCallInfo = completionInfo.getFunctionCallInfoAtOffset(textDocument.offsetAt(new vscode.Position(8, 42)), helpCompletionInfo);
+        assert(functionCallInfo);
+        if (functionCallInfo) {
+          let [funcInfo, parameter] = functionCallInfo;
+          assert(funcInfo instanceof MacroFuncCompletionInfo);
+          assert(funcInfo.name === "AcceptLotsOfParams");
+          assert(parameter === 1);
+        }
+      }
+      {
+        let functionCallInfo = completionInfo.getFunctionCallInfoAtOffset(textDocument.offsetAt(new vscode.Position(12, 28)), helpCompletionInfo);
+        assert(!functionCallInfo);
       }
     });
   } catch (err) {

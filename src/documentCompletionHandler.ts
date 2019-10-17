@@ -106,31 +106,70 @@ export class DocumentCompletionInfo {
     if (iTokenAtOffset === -1) {
       return undefined;
     }
+    let firstToken = this.tokens[iTokenAtOffset];
+    // if were exactly at the closing bracket, we should move one token back
+    // (otherwise that would be considered as already closed function call and no
+    // signature would be given)
+    if (firstToken.value === ")" && firstToken.range[0] === offset) {
+      iTokenAtOffset--;
+    }
+
     let bracketCounter = 0;
     let parameter = 0;
     let potentialCallStartFound = false;
     let iCurrentToken = iTokenAtOffset;
+    let expectingTokenTypesAndValues: [number, string[]][] = [];
+    function IsTokenUnexpected(token: any): boolean {
+      if (expectingTokenTypesAndValues.length === 0) {
+        return false;
+      }
+      for (let expectedTypeAndValue of expectingTokenTypesAndValues) {
+        let [expectedType, expectedValues] = expectedTypeAndValue;
+        if (token.type === expectedType) {
+          for (let value of expectedValues) {
+            if (token.value === value) {
+              return false;
+            }
+          }
+        }
+      }
+      return true;
+    }
     for ( ; iCurrentToken >= 0; --iCurrentToken) {
       let currentToken = this.tokens[iCurrentToken];
-      // skip tokens inside nested calls
-      if (bracketCounter > 0) {
-        if (currentToken.value === '(') {
-          bracketCounter--;
+
+      if (IsTokenUnexpected(currentToken)) {
+        return undefined;
+      } else {
+        expectingTokenTypesAndValues = [];
+      }
+
+      if (currentToken.value === '(') {
+        if (bracketCounter === 0) {
+          potentialCallStartFound = true;
+          break;
         }
+        bracketCounter--;
         continue;
       }
+     
       // detecting nested function calls
       if (currentToken.value === ')') {
         bracketCounter++;
+        continue;
+      }
+      // skip tokens inside nested calls
+      if (bracketCounter > 0) {
         continue;
       }
       if (currentToken.value === ',') {
         parameter++;
         continue;
       }
-      if (currentToken.value === '(') {
-        potentialCallStartFound = true;
-        break;
+      if (currentToken.type === luaparse.tokenTypes.Identifier
+          || currentToken.type === luaparse.tokenTypes.StringLiteral
+          || currentToken.type === luaparse.tokenTypes.NumericLiteral) {
+        expectingTokenTypesAndValues = [[luaparse.tokenTypes.Punctuator, [",", "+", "-", "*", "%", "(", "{"]]];
       }
     }
     if (!potentialCallStartFound || iCurrentToken <= 0) {
