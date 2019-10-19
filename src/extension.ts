@@ -3,7 +3,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as seFilesystem from './sefilesystem';
-import {DocumentCompletionHandler, DocumentCompletionInfo, TokenInfo, VariableInfo} from './documentCompletionHandler';
+import {DocumentCompletionHandler, DocumentCompletionInfo, TokenInfo, VariableInfo, DocumentParsingError} from './documentCompletionHandler';
 import {HelpCompletionInfo, MacroFuncCompletionInfo, CvarFunctionCompletionInfo,
   CvarCompletionInfo, MacroClassCompletionInfo} from './seHelp';
 import { stringify } from 'querystring';
@@ -34,6 +34,10 @@ class SEDLua implements vscode.CompletionItemProvider {
     vscode.languages.registerHoverProvider("lua", this);
 
     vscode.languages.registerSignatureHelpProvider("lua", this, "(");
+
+    context.subscriptions.push(
+      vscode.workspace.onDidCloseTextDocument(doc => this.diagnosticsCollection.delete(doc.uri))
+    );
   }
 
   provideSignatureHelp(document: vscode.TextDocument, position: vscode.Position,
@@ -190,11 +194,26 @@ class SEDLua implements vscode.CompletionItemProvider {
     this.getOrCreateDocumentCompletionHandler(document);
   }
 
-  private onDidChangeTextDocument(e: vscode.TextDocumentChangeEvent) {
+  private async onDidChangeTextDocument(e: vscode.TextDocumentChangeEvent) {
     let documentCompletionHandler = this.getOrCreateDocumentCompletionHandler(e.document);
-    if (documentCompletionHandler) {
-      documentCompletionHandler.onDocumentChanged(e.document);
+    if (!documentCompletionHandler) {
+      return;
     }
+    documentCompletionHandler.onDocumentChanged(e.document);
+    let documentCompletionInfo = await documentCompletionHandler.getCompletionInfoNow();
+    if (!documentCompletionInfo) {
+      return;
+    }
+    // update diagnostics (to error or empty)
+    let diagnostics: Array<vscode.Diagnostic> = [];
+    if (documentCompletionInfo.error) {
+      let errorRange = documentCompletionInfo.error.range;
+      let diagnosticRange = new vscode.Range(errorRange[0], errorRange[1], errorRange[2], errorRange[3]);
+      let diagnostic = new vscode.Diagnostic(diagnosticRange,
+      documentCompletionInfo.error.message, vscode.DiagnosticSeverity.Error);
+      diagnostics = [diagnostic];
+    }
+    this.diagnosticsCollection.set(e.document.uri, diagnostics);
   }
 
   private extractContentSoftPath(hardPath: string): string {
@@ -401,6 +420,8 @@ class SEDLua implements vscode.CompletionItemProvider {
 
     return funcAndVarCompletionItems;
   }
+
+  private diagnosticsCollection = vscode.languages.createDiagnosticCollection("SEDLua");
 }
 
 function createCppMarkdownWithComment(cppCode: string, comment?: string) {

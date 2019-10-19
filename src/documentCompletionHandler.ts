@@ -55,7 +55,7 @@ export class DocumentCompletionInfo {
   functions: Set<string> = new Set<string>();
   ast: any;
   tokens: any[] = [];
-  error: string|undefined;
+  error: DocumentParsingError|undefined;
 
   getTokenIndexAtOffset(offset: number) : number {
     for (let i = 0; i < this.tokens.length; i++) {
@@ -284,6 +284,15 @@ export class DocumentCompletionInfo {
   }
 }
 
+export class DocumentParsingError {
+  constructor(range: Array<number>, message: string) {
+    this.range = range;
+    this.message = message;
+  }
+  range: Array<number> = [];
+  message: string = "";
+}
+
 export class DocumentCompletionHandler {
   constructor(document: vscode.TextDocument) {
     this.startParsingDocument(document);
@@ -370,7 +379,7 @@ export class DocumentCompletionHandler {
     try {
       result.ast = luaparse.parse(documentText, parseOptions);
     } catch (err) {
-      result.error = err.message;
+      result.error = new DocumentParsingError([err.line - 1, err.column, err.line - 1, err.column + 10000], err.message);
     } finally {
       parseOptions.wait = true;
       let manualParser = luaparse.parse(documentText, parseOptions);
