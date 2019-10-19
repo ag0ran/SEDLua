@@ -14,7 +14,7 @@ class SEDLua implements vscode.CompletionItemProvider {
     context.subscriptions.push(
       vscode.workspace.onDidOpenTextDocument(this.onDidOpenTextDocument, this));
     context.subscriptions.push(
-        vscode.workspace.onDidChangeTextDocument(this.onDidOChangeTextDocument, this));
+        vscode.workspace.onDidChangeTextDocument(this.onDidChangeTextDocument, this));
     context.subscriptions.push(
       vscode.workspace.onDidChangeWorkspaceFolders(this.onDidChangeWorkspaceFolders, this));
 
@@ -190,7 +190,7 @@ class SEDLua implements vscode.CompletionItemProvider {
     this.getOrCreateDocumentCompletionHandler(document);
   }
 
-  private onDidOChangeTextDocument(e: vscode.TextDocumentChangeEvent) {
+  private onDidChangeTextDocument(e: vscode.TextDocumentChangeEvent) {
     let documentCompletionHandler = this.getOrCreateDocumentCompletionHandler(e.document);
     if (documentCompletionHandler) {
       documentCompletionHandler.onDocumentChanged(e.document);
