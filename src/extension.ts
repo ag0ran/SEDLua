@@ -6,7 +6,10 @@ import * as seFilesystem from './sefilesystem';
 import {DocumentCompletionHandler, DocumentCompletionInfo, TokenInfo, VariableInfo, DocumentParsingError} from './documentCompletionHandler';
 import {HelpCompletionInfo, MacroFuncCompletionInfo, CvarFunctionCompletionInfo,
   CvarCompletionInfo, MacroClassCompletionInfo} from './seHelp';
+import {log} from "./log";
 import { stringify } from 'querystring';
+import { performance } from 'perf_hooks';
+import { start } from 'repl';
 
 class SEDLua implements vscode.CompletionItemProvider {
   constructor(context: vscode.ExtensionContext) {
@@ -136,10 +139,10 @@ class SEDLua implements vscode.CompletionItemProvider {
     }
     
     this.workspaceScripts = new Set<string>();
-    SEDLua.collectWorkspaceScripts(this.workspaceScripts);
+    await SEDLua.collectWorkspaceScripts(this.workspaceScripts);
 
     this.helpCompletionInfo = new HelpCompletionInfo();
-    SEDLua.collectHelpFiles(this.helpCompletionInfo);
+    await SEDLua.collectHelpFiles(this.helpCompletionInfo);
   }
 
   private getDocumentCompletionInfo(document: vscode.TextDocument): DocumentCompletionInfo|undefined {
@@ -235,8 +238,10 @@ class SEDLua implements vscode.CompletionItemProvider {
 
   private workspaceScripts : Set<string> = new Set<string>();
 
-  private static collectWorkspaceScripts(workspaceScripts: Set<string>)
+  private static async collectWorkspaceScripts(workspaceScripts: Set<string>)
   {
+    log.printLine("Collecting workspace scripts...");
+    let startTime = performance.now();
     if (vscode.workspace.workspaceFolders) {
       let forFileFunc = (fileUri: vscode.Uri) => {
         workspaceScripts.add(seFilesystem.uriToSoftpath(fileUri));
@@ -248,13 +253,17 @@ class SEDLua implements vscode.CompletionItemProvider {
           forFileFunc: forFileFunc,
           fileFilter: fileFilter,
         };
-        seFilesystem.forEachFileRecursive(forEachFileOptions);
+        await seFilesystem.forEachFileRecursiveAsync(forEachFileOptions);
       }
     }
+    let durationSeconds = (performance.now() - startTime)/1000;
+    log.printLine("Collected " + workspaceScripts.size + " workspace scripts in " + durationSeconds.toFixed(1) + " seconds.");
   }
 
   // Collects information from all xml help files (cvars and macros).
-  private static collectHelpFiles(helpCompletionInfo: HelpCompletionInfo) {
+  private static async collectHelpFiles(helpCompletionInfo: HelpCompletionInfo) {
+    let startTime = performance.now();
+    log.printLine("Collecting help files...");
     let forEachFileOptions: seFilesystem.ForEachFileOptions = {
       startingDirUri: seFilesystem.softPathToUri("Help/"),
       fileFilter: new Set([".xml"]),
@@ -262,7 +271,11 @@ class SEDLua implements vscode.CompletionItemProvider {
         helpCompletionInfo.addHelpFromFile(fileUri.fsPath);
       }
     };
-    seFilesystem.forEachFileRecursive(forEachFileOptions);
+    await seFilesystem.forEachFileRecursiveAsync(forEachFileOptions);
+    let durationSeconds = (performance.now() - startTime)/1000;
+    log.printLine("Processed " + helpCompletionInfo.processedFiles.size + " help files in " + durationSeconds.toFixed(1) + " seconds.");
+    log.printLine("  Found " + helpCompletionInfo.cvars.length + " cvars, " + helpCompletionInfo.cvarFunctions.length + " cvar functions.");
+    log.printLine("  Found " + helpCompletionInfo.macroClasses.length + " macro classes, " + helpCompletionInfo.macroFunctions.length + " macro functions.");
   }
 
   private onDidChangeWorkspaceFolders(onDidChangeWorkspaceFolders: vscode.WorkspaceFoldersChangeEvent) {

@@ -1,5 +1,6 @@
 import {Uri, FileType, workspace} from 'vscode';
 import * as path from 'path';
+import { log } from './log';
 
 // Serious Engine related filesystem functions.
 
@@ -89,5 +90,32 @@ export function forEachFileRecursive(options: ForEachFileOptions) {
       .then(readDirectoryResultFunc.bind(null, options.startingDirUri));
   } catch (err) {
     console.log(err.message);
+  }
+}
+
+export async function forEachFileRecursiveAsync(options: ForEachFileOptions) {
+  try {
+    async function readDirRecursive(parentDirUri: Uri, otions: ForEachFileOptions) {
+      let readResults = await workspace.fs.readDirectory(parentDirUri);
+      for (let [fileName, fileType] of readResults) {
+        let fileUri = Uri.file(parentDirUri.path + "/" + fileName);
+        if (fileType === FileType.File) {
+          let fileExt = path.extname(fileName);
+          // skip unsupported script extensions
+          if (options.fileFilter && !options.fileFilter.has(fileExt)) {
+            continue;
+          }
+          options.forFileFunc(fileUri);
+        } else if (fileType === FileType.Directory) {
+          // recurse into directory if allowed
+          if (!options.shouldRecurseIntoDir || options.shouldRecurseIntoDir(fileUri)) {
+            await readDirRecursive(fileUri, options);
+          }
+        }
+      }
+    }
+    await readDirRecursive(options.startingDirUri, options);
+  } catch (err) {
+    log.printLine("Error reading files from " + options.startingDirUri.fsPath + ": " + err.message);
   }
 }
