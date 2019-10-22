@@ -1,4 +1,4 @@
-import {Uri, FileType, workspace} from 'vscode';
+import {Uri, FileType, workspace, FileStat} from 'vscode';
 import * as path from 'path';
 import { log } from './log';
 
@@ -56,41 +56,11 @@ export interface ForEachFileOptions {
   // Uri of the starting dir.
   startingDirUri: Uri;
   // Function called for each found file. Should be used to collect desired files.
-  forFileFunc: (fileUri: Uri) => void;
+  forFileFunc: ((fileUri: Uri) => void)|((fileUri: Uri) => Thenable<void>);
   // Optional file extension filter. Files with extension outside the filter are ignored.
   fileFilter?: Set<string>;
   // Optional function called for each directory. Returns whether to recurse into that directory.
   shouldRecurseIntoDir?: (dirUri: Uri) => boolean;
-}
-
-export function forEachFileRecursive(options: ForEachFileOptions) {
-  try {
-    let readDirectoryResultFunc = (parentDirUri: Uri, result: [string, FileType][]) => {
-      for (const fileResult of result) {
-        let [fileName, fileType] = fileResult;
-        let fileUri = Uri.file(parentDirUri.path + "/" + fileName);
-        if (fileType === FileType.File) {
-          let fileExt = path.extname(fileName);
-          // skip unsupported script extensions
-          if (options.fileFilter && !options.fileFilter.has(fileExt)) {
-            continue;
-          }
-          options.forFileFunc(fileUri);
-        } else if (fileType === FileType.Directory) {
-          // recurse into directory if allowed
-          if (!options.shouldRecurseIntoDir || options.shouldRecurseIntoDir(fileUri)) {
-            workspace.fs.readDirectory(fileUri)
-              .then(readDirectoryResultFunc.bind(null, fileUri));
-          }
-        }
-      }
-    };
-
-    workspace.fs.readDirectory(options.startingDirUri)
-      .then(readDirectoryResultFunc.bind(null, options.startingDirUri));
-  } catch (err) {
-    console.log(err.message);
-  }
 }
 
 export async function forEachFileRecursiveAsync(options: ForEachFileOptions) {
@@ -105,7 +75,7 @@ export async function forEachFileRecursiveAsync(options: ForEachFileOptions) {
           if (options.fileFilter && !options.fileFilter.has(fileExt)) {
             continue;
           }
-          options.forFileFunc(fileUri);
+          await options.forFileFunc(fileUri);
         } else if (fileType === FileType.Directory) {
           // recurse into directory if allowed
           if (!options.shouldRecurseIntoDir || options.shouldRecurseIntoDir(fileUri)) {

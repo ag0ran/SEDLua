@@ -1,0 +1,19 @@
+﻿{
+  "world": "Content/Test/AGoran/Script/ScriptDumpTest.wld",
+  "scripts": [
+    {
+      "script": "Temp/Scripts/SomeScript.lua",
+      "entityId": 8,
+      "variables": [
+        {
+          "name": "worldInfo",
+          "type": "CWorldInfoEntity"
+        },
+        {
+          "name": "markers",
+          "type": "CPathMarkerEntity"
+        }
+      ]
+    }
+  ]
+}

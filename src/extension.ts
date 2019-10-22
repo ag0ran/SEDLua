@@ -7,9 +7,8 @@ import {DocumentCompletionHandler, DocumentCompletionInfo, TokenInfo, VariableIn
 import {HelpCompletionInfo, MacroFuncCompletionInfo, CvarFunctionCompletionInfo,
   CvarCompletionInfo, MacroClassCompletionInfo} from './seHelp';
 import {log} from "./log";
-import { stringify } from 'querystring';
+import fs = require('fs');
 import { performance } from 'perf_hooks';
-import { start } from 'repl';
 
 class SEDLua implements vscode.CompletionItemProvider {
   constructor(context: vscode.ExtensionContext) {
@@ -124,7 +123,40 @@ class SEDLua implements vscode.CompletionItemProvider {
     return hover;
   }
 
+  private workspaceCheckTimeoutId: NodeJS.Timeout|undefined;
+  private processedWorldScripts = new Map<vscode.Uri, Date>();
+
+  private async workspaceCheckTimeoutCallback() {
+    // check world dumped world scripts
+    let forEachFileOptions: seFilesystem.ForEachFileOptions = {
+      startingDirUri: seFilesystem.softPathToUri("Temp/WorldScripts"),
+      forFileFunc: async (fileUri: vscode.Uri) => {
+        try {
+          let lastModificationTime = this.processedWorldScripts.get(fileUri);
+          let fileStats = fs.statSync(fileUri.fsPath);
+          if (fileStats.mtime === lastModificationTime) {
+            return;
+          }
+          this.processedWorldScripts.set(fileUri, fileStats.mtime);
+          let worldScriptDumpString = fs.readFileSync(fileUri.fsPath, "utf8");
+          // removing BOM
+          worldScriptDumpString = worldScriptDumpString.replace(/^\uFEFF/, '');
+          let worldScriptInfo = JSON.parse(worldScriptDumpString);
+          log.printLine("Read world scripts from " + fileUri.fsPath);
+        } catch (err) {
+          log.printLine("Error reading world script from " + fileUri.fsPath + ": " + err.message);
+        }
+      },
+      fileFilter: new Set([".json"]),
+    };
+    await seFilesystem.forEachFileRecursiveAsync(forEachFileOptions);
+  }
+
   private async initWorkspace() {
+    if (this.workspaceCheckTimeoutId) {
+     clearTimeout(this.workspaceCheckTimeoutId);
+    }
+
     let filesystemInitialized = false;
     if (vscode.workspace.workspaceFolders) {
       for (let workspaceFolder of vscode.workspace.workspaceFolders) {
@@ -143,6 +175,8 @@ class SEDLua implements vscode.CompletionItemProvider {
 
     this.helpCompletionInfo = new HelpCompletionInfo();
     await SEDLua.collectHelpFiles(this.helpCompletionInfo);
+
+    this.workspaceCheckTimeoutId = setTimeout(this.workspaceCheckTimeoutCallback.bind(this), 300);
   }
 
   private getDocumentCompletionInfo(document: vscode.TextDocument): DocumentCompletionInfo|undefined {

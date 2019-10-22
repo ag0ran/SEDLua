@@ -3,6 +3,7 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 import {DocumentCompletionHandler, DocumentCompletionInfo, TokenInfo} from '../../documentCompletionHandler';
 import {HelpCompletionInfo, MacroFuncCompletionInfo} from '../../seHelp';
+import fs = require('fs');
 
 function replaceOutWithSrc(inPath: string)
 {
@@ -98,6 +99,23 @@ async function testDocumentParsing() {
   }
 }
 
+async function testWorldScriptsParsing() {
+  test('World scripts parsing', async function() {
+    try {
+
+    let baseTestPath = replaceOutWithSrc(__dirname);
+    let scriptDumpFileName = baseTestPath + "sampleHelp/ScriptDumpTest.wld.json";
+    let scriptDumpString = fs.readFileSync(scriptDumpFileName, "utf8");
+    scriptDumpString = scriptDumpString.replace(/^\uFEFF/, '');
+    let scriptDumpJson = JSON.parse(scriptDumpString);
+    assert(scriptDumpJson);
+    } catch (err) {
+      assert(false, "Tests failed due to error: " + err.message);
+    }
+  });
+}
+
 suite('Document completion', () => {
   testDocumentParsing();
+  testWorldScriptsParsing();
 });
