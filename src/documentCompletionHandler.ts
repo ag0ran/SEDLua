@@ -483,10 +483,13 @@ export class DocumentCompletionHandler {
     for (const func of result.functions) {
       result.variables.delete(func);
     }
-    this.currentCompletionInfo = result;
-    if (!result.error && result.ast) {
+    // use last good ast as the current ast
+    if (!result.ast) {
+      result.ast = this.lastAst;
+    } else {
       this.lastAst = result.ast;
     }
+    this.currentCompletionInfo = result;
   }
   private fixAst(contentChanges: ReadonlyArray<vscode.TextDocumentContentChangeEvent>)
   {
