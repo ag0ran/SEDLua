@@ -189,6 +189,98 @@ export class DocumentCompletionInfo {
     }
   }
 
+  resolveMemberExpressionAtOffset(offset: number, helpCompletionInfo: HelpCompletionInfo):
+  VariableInfo|MacroFuncCompletionInfo|CvarFunctionCompletionInfo|MacroClassCompletionInfo|string|undefined
+  {
+    if (!this.ast) {
+      return undefined;
+    }
+    function IsOutsideOfRange(obj: any, offset: number) {
+      if (!obj.range || !Array.isArray(obj.range)) {
+        return false;
+      }
+      return offset < obj.range[0] || offset > obj.range[1];
+    }
+    function findIdentifierOrMemberExpressionRecursive(obj: any, offset: number): any {
+      if (IsOutsideOfRange(obj, offset)) {
+        return;
+      }
+      for (const key of Object.keys(obj)) {
+        const value = obj[key];
+        if (key === "type") {
+          if (value === "MemberExpression") {
+            if (obj.identifier && !IsOutsideOfRange(obj.identifier, offset)) {
+              return obj;
+            }
+          } else if (value === "Identifier") {
+            return obj;
+          }
+        } 
+        if (Array.isArray(value)) {
+          for (const v of value) {
+            if (v instanceof Object) {
+              let result = findIdentifierOrMemberExpressionRecursive(v, offset);
+              if (result) {
+                return result;
+              }
+            }
+          }
+        } else if (value instanceof Object) {
+          let result = findIdentifierOrMemberExpressionRecursive(value, offset);
+          if (result) {
+            return result;
+          }
+        }
+      }
+      return undefined;
+    }
+    let identifierOrMemberExpression: any;
+    // find member expression at offset range
+    for (const statement of this.ast.body) {
+      identifierOrMemberExpression = findIdentifierOrMemberExpressionRecursive(statement, offset);
+      if (identifierOrMemberExpression) {
+        break;
+      }
+    }
+    let variables = this.variables;
+
+    function resolveMemberExpressionRecursive(memberExpression: any):
+      VariableInfo|MacroFuncCompletionInfo|CvarFunctionCompletionInfo|MacroClassCompletionInfo|string|undefined
+    {
+      if (memberExpression.type === "Identifier") {
+        let variableInfo = variables.get(memberExpression.name);
+        if (variableInfo) {
+          return variableInfo.type ? helpCompletionInfo.findMacroClassInfo(variableInfo.type) : undefined;
+        }
+        return helpCompletionInfo.findMacroFuncInfo(memberExpression.name)
+          || helpCompletionInfo.findCvarFuncInfo(memberExpression.name);
+      } else if (memberExpression.type !== "MemberExpression") {
+        return undefined;
+      }
+      let baseExpressionValue = resolveMemberExpressionRecursive(memberExpression.base);
+      if (!baseExpressionValue) {
+        return undefined;
+      }
+      if (baseExpressionValue instanceof MacroClassCompletionInfo) {
+        if (memberExpression.indexer === ".") {
+          return helpCompletionInfo.findMacroClassEvent(baseExpressionValue, memberExpression.identifier.name);
+        } else if (memberExpression.indexer === ":") {
+          return helpCompletionInfo.findMacroClassFunction(baseExpressionValue, memberExpression.identifier.name);
+        } else {
+          return undefined;
+        }
+      } else {
+        return undefined;
+      }
+    }
+
+    if (identifierOrMemberExpression) {
+      return resolveMemberExpressionRecursive(identifierOrMemberExpression);
+    }
+
+    return undefined;
+  }
+
   resolveIndexingExpressionAtToken(iStartingToken: number, helpCompletionInfo: HelpCompletionInfo):
     MacroFuncCompletionInfo|CvarFunctionCompletionInfo|MacroClassCompletionInfo|string|undefined
   {
@@ -295,40 +387,23 @@ export class DocumentParsingError {
 
 export class DocumentCompletionHandler {
   constructor(document: vscode.TextDocument) {
-    this.startParsingDocument(document);
+    this.parseDocument(document.getText());
   }
   getCompletionInfo(): DocumentCompletionInfo|undefined {
-    if (this.currentAsyncParsing) {
-      this.currentAsyncParsing.then();
-      this.currentAsyncParsing = undefined;
-    }
     return this.currentCompletionInfo;
   }
   async getCompletionInfoNow(): Promise<DocumentCompletionInfo|undefined> {
-    if (this.currentAsyncParsing) {
-      await this.currentAsyncParsing;
-    }
     return this.currentCompletionInfo;
   }
   getLastError(): string {
     return this.lastError;
   }
-  onDocumentChanged(document: vscode.TextDocument) {
-    this.startParsingDocument(document);
+  async onDocumentChanged(e: vscode.TextDocumentChangeEvent) {
+    await this.parseDocument(e.document.getText());
+    await this.fixAst(e.contentChanges);
   }
 
-  private startParsingDocument(document: vscode.TextDocument) {
-    this.currentAsyncParsing = this.parseDocument(document.getText());
-    
-    this.currentAsyncParsing.then((result) => {
-        this.currentCompletionInfo = result;
-        this.lastError = "";
-      })
-      .catch(err => this.lastError = err.message)
-      .finally(() => this.currentAsyncParsing = undefined);
-  }
-
-  private async parseDocument(documentText: string): Promise<DocumentCompletionInfo> {
+  private async parseDocument(documentText: string) {
     let result = new DocumentCompletionInfo();
     function onCreateNodeCallback(node: any) {
       switch (node.type) {
@@ -408,11 +483,56 @@ export class DocumentCompletionHandler {
     for (const func of result.functions) {
       result.variables.delete(func);
     }
-    return result;
+    this.currentCompletionInfo = result;
+    if (!result.error && result.ast) {
+      this.lastAst = result.ast;
+    }
+  }
+  private fixAst(contentChanges: ReadonlyArray<vscode.TextDocumentContentChangeEvent>)
+  {
+    // nothing to do if no current completion info or no last error (AST is correct when there was no error)
+    if (!this.currentCompletionInfo || !this.currentCompletionInfo.error) {
+      return;
+    }
+    let ast = this.lastAst;
+    if (!ast) {
+      return;
+    }
+    function fixRangesRecursive(obj: any, rangeOffset: number, rangeChange: number) {
+      for (const key of Object.keys(obj)) {
+        let value = obj[key];
+        if (key === "range") {
+          if (Array.isArray(value) && value.length === 2) {
+            if (rangeOffset > value[0]) {
+              if (rangeOffset <= value[1]) {
+                value[1] += rangeChange;
+              }
+            } else if (rangeOffset <= value[0]) {
+              value[0] += rangeChange;
+              value[1] += rangeChange;
+            }
+          }
+        } else if (Array.isArray(value)) {
+          for (const v of value) {
+            if (v instanceof Object) {
+              fixRangesRecursive(v, rangeOffset, rangeChange);
+            }
+          }
+        } else if (value instanceof Object) {
+          fixRangesRecursive(value, rangeOffset, rangeChange);
+        }
+      }
+    }
+
+    for (const contentChangeEvent of contentChanges) {
+      let rangeOffset = contentChangeEvent.rangeOffset;
+      let rangeChange = contentChangeEvent.text.length - contentChangeEvent.rangeLength;
+      fixRangesRecursive(ast, rangeOffset, rangeChange);
+    }
   }
   private currentCompletionInfo: DocumentCompletionInfo|undefined = undefined;
-  private currentAsyncParsing: Promise<DocumentCompletionInfo>|undefined = undefined;
   private lastError: string = "";
+  private lastAst: any;
 }
 
 function isIndexingChar(char: string) {return char === '.' || char === ':';}

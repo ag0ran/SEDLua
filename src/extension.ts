@@ -102,7 +102,7 @@ class SEDLua implements vscode.CompletionItemProvider {
     if (iTokenAtOffset === -1) {
       return undefined;
     }
-    let lastInfo = completionInfo.resolveIndexingExpressionAtToken(iTokenAtOffset, this.helpCompletionInfo);
+    let lastInfo = completionInfo.resolveMemberExpressionAtOffset(offset, this.helpCompletionInfo);
 
     let hover: vscode.Hover|undefined;
     if (lastInfo instanceof MacroClassCompletionInfo) {
@@ -236,7 +236,7 @@ class SEDLua implements vscode.CompletionItemProvider {
     if (!documentCompletionHandler) {
       return;
     }
-    documentCompletionHandler.onDocumentChanged(e.document);
+    documentCompletionHandler.onDocumentChanged(e);
     let documentCompletionInfo = await documentCompletionHandler.getCompletionInfoNow();
     if (!documentCompletionInfo) {
       return;
