@@ -9,6 +9,7 @@ import {HelpCompletionInfo, MacroFuncCompletionInfo, CvarFunctionCompletionInfo,
 import {log} from "./log";
 import fs = require('fs');
 import { performance } from 'perf_hooks';
+import { refreshWorldScripts } from './worldScripts';
 
 class SEDLua implements vscode.CompletionItemProvider {
   constructor(context: vscode.ExtensionContext) {
@@ -124,32 +125,9 @@ class SEDLua implements vscode.CompletionItemProvider {
   }
 
   private workspaceCheckTimeoutId: NodeJS.Timeout|undefined;
-  private processedWorldScripts = new Map<vscode.Uri, Date>();
 
   private async workspaceCheckTimeoutCallback() {
-    // check world dumped world scripts
-    let forEachFileOptions: seFilesystem.ForEachFileOptions = {
-      startingDirUri: seFilesystem.softPathToUri("Temp/WorldScripts"),
-      forFileFunc: async (fileUri: vscode.Uri) => {
-        try {
-          let lastModificationTime = this.processedWorldScripts.get(fileUri);
-          let fileStats = fs.statSync(fileUri.fsPath);
-          if (fileStats.mtime === lastModificationTime) {
-            return;
-          }
-          this.processedWorldScripts.set(fileUri, fileStats.mtime);
-          let worldScriptDumpString = fs.readFileSync(fileUri.fsPath, "utf8");
-          // removing BOM
-          worldScriptDumpString = worldScriptDumpString.replace(/^\uFEFF/, '');
-          let worldScriptInfo = JSON.parse(worldScriptDumpString);
-          log.printLine("Read world scripts from " + fileUri.fsPath);
-        } catch (err) {
-          log.printLine("Error reading world script from " + fileUri.fsPath + ": " + err.message);
-        }
-      },
-      fileFilter: new Set([".json"]),
-    };
-    await seFilesystem.forEachFileRecursiveAsync(forEachFileOptions);
+    await refreshWorldScripts();
   }
 
   private async initWorkspace() {
