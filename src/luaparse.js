@@ -90,6 +90,8 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
     // Store the start and end character locations on each syntax node as
     // `range: [start, end]`.
     , ranges: false
+    // If set, exceptions will not be thrown when parsing errors are encountered, errors will be collected instead
+    , errorsNotExceptions: false
     // A callback which will be invoked when a syntax node has been completed.
     // The node which has been created will be passed as the only parameter.
     , onCreateNode: null
@@ -491,7 +493,10 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       error.line = line;
       error.column = col;
     }
-    throw error;
+    if (!options.errorsNotExceptions) {
+      throw error;
+    }
+    parse_errors.push(error);
   }
 
   // #### Raise an unexpected token error.
@@ -1215,6 +1220,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
   var locations = []
     , trackLocations;
+  var parse_errors = [];
 
   function createLocationMarker() {
     return new Marker(token);
@@ -1616,7 +1622,11 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
     if (trackLocations) marker = createLocationMarker();
     expression = parsePrefixExpression();
 
-    if (null == expression) return unexpected(token);
+    if (null == expression) {
+      unexpected(token);
+      next();
+      return;
+    }
     if (',='.indexOf(token.value) >= 0) {
       var variables = [expression]
         , init = []
@@ -1625,7 +1635,10 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       validateVar(expression);
       while (consume(',')) {
         exp = parsePrefixExpression();
-        if (null == exp) raiseUnexpectedToken('<expression>', token);
+        if (null == exp) {
+          raiseUnexpectedToken('<expression>', token);
+          return;
+        }
         validateVar(exp);
         variables.push(exp);
       }
@@ -1645,7 +1658,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
     // The prefix expression was neither part of an assignment or a
     // callstatement, however as it was valid it's been consumed, so raise
     // the exception on the previous token to provide a helpful message.
-    return unexpected(previous);
+    return unexpected(previous, token.value);
   }
 
 
@@ -2070,6 +2083,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       _input = undefined;
     }
     if (!_options) _options = {};
+    parse_errors = [];
 
     input = _input || '';
     options = extend(defaultOptions, _options);
@@ -2124,7 +2138,9 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
     if (locations.length > 0)
       throw new Error('Location tracking failed. This is most likely a bug in luaparse');
-
+    if (parse_errors.length) {
+       chunk.parse_errors = parse_errors;
+    }
     return chunk;
   }
 

@@ -56,6 +56,7 @@ export class DocumentCompletionInfo {
   ast: any;
   tokens: any[] = [];
   error: DocumentParsingError|undefined;
+  errors: Array<DocumentParsingError>|undefined;
 
   getTokenIndexAtOffset(offset: number) : number {
     for (let i = 0; i < this.tokens.length; i++) {
@@ -449,10 +450,18 @@ export class DocumentCompletionHandler {
       scope: true,
       location: true,
       ranges: true,
+      errorsNotExceptions: true,
       onCreateNode: onCreateNodeCallback
     };
     try {
       result.ast = luaparse.parse(documentText, parseOptions);
+      if (result.ast.parse_errors && result.ast.parse_errors.length > 0) {
+        result.errors = [];
+        for (let err of result.ast.parse_errors) {
+          result.errors.push(new DocumentParsingError([err.line - 1, err.column, err.line - 1, err.column + 10000], err.message));
+        }
+        
+      }
     } catch (err) {
       result.error = new DocumentParsingError([err.line - 1, err.column, err.line - 1, err.column + 10000], err.message);
     } finally {

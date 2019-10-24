@@ -225,8 +225,16 @@ class SEDLua implements vscode.CompletionItemProvider {
       let errorRange = documentCompletionInfo.error.range;
       let diagnosticRange = new vscode.Range(errorRange[0], errorRange[1], errorRange[2], errorRange[3]);
       let diagnostic = new vscode.Diagnostic(diagnosticRange,
-      documentCompletionInfo.error.message, vscode.DiagnosticSeverity.Error);
+        documentCompletionInfo.error.message, vscode.DiagnosticSeverity.Error);
       diagnostics = [diagnostic];
+    } else if (documentCompletionInfo.errors) {
+      for (const err of documentCompletionInfo.errors) {
+        let errorRange = err.range;
+        let diagnosticRange = new vscode.Range(errorRange[0], errorRange[1], errorRange[2], errorRange[3]);
+        let diagnostic = new vscode.Diagnostic(diagnosticRange,
+          err.message, vscode.DiagnosticSeverity.Error);
+        diagnostics.push(diagnostic);
+      }
     }
     this.diagnosticsCollection.set(e.document.uri, diagnostics);
   }
