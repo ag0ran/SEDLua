@@ -149,7 +149,7 @@ class SEDLua implements vscode.CompletionItemProvider {
     }
     
     this.workspaceScripts = new Set<string>();
-    await SEDLua.collectWorkspaceScripts(this.workspaceScripts);
+    SEDLua.collectWorkspaceScripts(this.workspaceScripts);
 
     this.helpCompletionInfo = new HelpCompletionInfo();
     await SEDLua.collectHelpFiles(this.helpCompletionInfo);
