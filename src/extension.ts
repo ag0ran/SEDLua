@@ -202,14 +202,22 @@ class SEDLua implements vscode.CompletionItemProvider {
       });
   }
 
+  private isDocumentSupported(document: vscode.TextDocument): boolean
+  {
+    return document.languageId === "lua";
+  }
+
   private onDidOpenTextDocument(document: vscode.TextDocument) {
-    if (document.languageId !== "lua") {
+    if (!this.isDocumentSupported(document)) {
       return;
     }
     this.getOrCreateDocumentCompletionHandler(document);
   }
 
   private async onDidChangeTextDocument(e: vscode.TextDocumentChangeEvent) {
+    if (!this.isDocumentSupported(e.document)) {
+      return;
+    }
     let documentCompletionHandler = this.getOrCreateDocumentCompletionHandler(e.document);
     if (!documentCompletionHandler) {
       return;
