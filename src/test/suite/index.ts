@@ -17,7 +17,7 @@ function extractTestsRoot()
     if (outPathStart === -1) {
       return undefined;
 		}
-		testRelPath = "\\src\\test\\"
+		testRelPath = "\\src\\test\\";
     slashChar = "\\";
   }
   return inPath.substring(0, outPathStart) + testRelPath + "SeRoot" + slashChar + "Content";
