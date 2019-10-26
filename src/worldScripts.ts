@@ -35,6 +35,26 @@ export class WorldScriptInfo {
 
 export class WorldScriptsStorage {
   worldScripts = new Map<string, Array<WorldScriptInfo>>();
+  getScriptInfo(scriptPath: string, worldPath?: string, entityId?: number): WorldScriptInfo|undefined {
+    let worldScriptInfos = this.worldScripts.get(scriptPath);
+    if (!worldScriptInfos) {
+      return undefined;
+    }
+    if (!worldPath || !entityId) {
+      if (worldScriptInfos.length !== 1) {
+        return undefined;
+      }
+      return worldScriptInfos[0];
+    }
+    return worldScriptInfos.find((worldScriptInfo) => worldScriptInfo.world === worldPath && worldScriptInfo.entityId === entityId);
+  }
+  getVarInfosForScript(scriptPath: string, worldPath?: string, entityId?: number) : Map<string, VariableInfo>|undefined {
+    let worldScriptInfo = this.getScriptInfo(scriptPath, worldPath, entityId);
+    if (worldScriptInfo) {
+      return worldScriptInfo.variables;
+    }
+    return undefined;
+  }
 }
 
 function getOrCreateScriptInfos(script: string) {

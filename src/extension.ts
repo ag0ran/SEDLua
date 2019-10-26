@@ -373,7 +373,7 @@ class SEDLua implements vscode.CompletionItemProvider {
 
         if (indexedVarToken && indexedVarToken.type === "Identifier") {
           let classCompletionItems = new Array<vscode.CompletionItem>();
-          let varInfo = completionInfo.variables.get(indexedVarToken.value);
+          let varInfo = completionInfo.getVariableInfo(indexedVarToken.value);
           if (varInfo && varInfo.type) {
             let macroClassInfo = this.helpCompletionInfo.findMacroClassInfo(varInfo.type);
             if (macroClassInfo) {
@@ -424,7 +424,7 @@ class SEDLua implements vscode.CompletionItemProvider {
     let funcAndVarCompletionItems = new Array<vscode.CompletionItem>();
 
 
-    completionInfo.variables.forEach((variableInfo, variableName) => {
+    completionInfo.forEachVariable((variableInfo, variableName) => {
       const varCompletionItem = new vscode.CompletionItem(variableName);
       varCompletionItem.kind = vscode.CompletionItemKind.Variable;
       if (variableInfo.type !== undefined) {

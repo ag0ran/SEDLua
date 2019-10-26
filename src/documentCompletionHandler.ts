@@ -1,6 +1,9 @@
 let luaparse = require('./luaparse');
 import * as vscode from 'vscode';
 import { MacroFuncCompletionInfo, CvarFunctionCompletionInfo, MacroClassCompletionInfo, HelpCompletionInfo } from './seHelp';
+import {worldScriptsStorage} from './worldScripts';
+import * as seFilesystem from './sefilesystem';
+
 
 export class VariableInfo {
   constructor(varType?: string) {
@@ -51,12 +54,36 @@ export class ParseInfo {
 }
 
 export class DocumentCompletionInfo {
+  constructor (documentSofPath?: string) {
+    this.documentSoftPath = documentSofPath || "";
+  }
   variables: Map<string, VariableInfo> = new Map<string, VariableInfo>();
   functions: Set<string> = new Set<string>();
   ast: any;
   tokens: any[] = [];
   error: DocumentParsingError|undefined;
   errors: Array<DocumentParsingError>|undefined;
+  documentSoftPath: string;
+
+  getVariableInfo(variableName: string): VariableInfo|undefined {
+    let variableInfo = this.variables.get(variableName);
+    if (variableInfo && variableInfo.type) {
+      return variableInfo;
+    }
+    let varInfos = worldScriptsStorage.getVarInfosForScript(this.documentSoftPath);
+    if (!varInfos) {
+      return undefined;
+    }
+    return varInfos.get(variableName);
+  }
+
+  forEachVariable(callbackFunc: (variableInfo: VariableInfo, variableName: string) => void) {
+    this.variables.forEach(callbackFunc);
+    let varInfos = worldScriptsStorage.getVarInfosForScript(this.documentSoftPath);
+    if (varInfos) {
+      varInfos.forEach(callbackFunc);
+    }
+  }
 
   getTokenIndexAtOffset(offset: number) : number {
     for (let i = 0; i < this.tokens.length; i++) {
@@ -243,13 +270,13 @@ export class DocumentCompletionInfo {
         break;
       }
     }
-    let variables = this.variables;
+    let documentCompletionInfo = this;
 
     function resolveMemberExpressionRecursive(memberExpression: any):
       VariableInfo|MacroFuncCompletionInfo|CvarFunctionCompletionInfo|MacroClassCompletionInfo|string|undefined
     {
       if (memberExpression.type === "Identifier") {
-        let variableInfo = variables.get(memberExpression.name);
+        let variableInfo = documentCompletionInfo.getVariableInfo(memberExpression.name);
         if (variableInfo) {
           return variableInfo.type ? helpCompletionInfo.findMacroClassInfo(variableInfo.type) : undefined;
         }
@@ -314,7 +341,7 @@ export class DocumentCompletionInfo {
     while (tokenChain.length > 0) {
       let token = tokenChain.pop();
       if (!lastInfo) {
-        let variableInfo = this.variables.get(token!.value);
+        let variableInfo = this.getVariableInfo(token!.value);
         if (variableInfo && variableInfo.type) {
           lastInfo = helpCompletionInfo.findMacroClassInfo(variableInfo.type);
         }
@@ -387,8 +414,11 @@ export class DocumentParsingError {
 }
 
 export class DocumentCompletionHandler {
+  private scriptSoftPath: string;
+  
   constructor(document: vscode.TextDocument) {
-    this.parseDocument(document.getText());
+    this.scriptSoftPath = seFilesystem.uriToSoftpath(document.uri);
+    this.parseDocument(document.getText(), this.scriptSoftPath);
   }
   getCompletionInfo(): DocumentCompletionInfo|undefined {
     return this.currentCompletionInfo;
@@ -400,12 +430,12 @@ export class DocumentCompletionHandler {
     return this.lastError;
   }
   async onDocumentChanged(e: vscode.TextDocumentChangeEvent) {
-    await this.parseDocument(e.document.getText());
+    await this.parseDocument(e.document.getText(), seFilesystem.uriToSoftpath(e.document.uri));
     await this.fixAst(e.contentChanges);
   }
 
-  private async parseDocument(documentText: string) {
-    let result = new DocumentCompletionInfo();
+  private async parseDocument(documentText: string, documentSoftPath?: string) {
+    let result = new DocumentCompletionInfo(documentSoftPath);
     function onCreateNodeCallback(node: any) {
       switch (node.type) {
         case "Identifier":

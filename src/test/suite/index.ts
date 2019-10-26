@@ -1,6 +1,32 @@
 import * as path from 'path';
 import * as Mocha from 'mocha';
 import * as glob from 'glob';
+import { initFilesystem } from '../../sefilesystem';
+import * as vscode from 'vscode';
+import * as assert from 'assert';
+
+// Since tests are being run from the output directory, we need to find the test directory path.
+function extractTestsRoot()
+{
+	let inPath = __dirname;
+	let outPathStart = inPath.lastIndexOf("/out/test/");
+	let testRelPath = "/src/test";
+  let slashChar = "/";
+  if (outPathStart === -1) {
+    outPathStart = inPath.lastIndexOf("\\out\\test\\");
+    if (outPathStart === -1) {
+      return undefined;
+		}
+		testRelPath = "\\src\\test\\"
+    slashChar = "\\";
+  }
+  return inPath.substring(0, outPathStart) + testRelPath + "SeRoot" + slashChar + "Content";
+}
+
+function initSeFileSystem () {
+	let testsRoot = extractTestsRoot();
+	assert(initFilesystem(vscode.Uri.file(testsRoot!)));
+}
 
 export function run(): Promise<void> {
 	// Create the mocha test
@@ -8,6 +34,9 @@ export function run(): Promise<void> {
 		ui: 'tdd',
 	});
 	mocha.useColors(true);
+
+	// we have to init the Se filesystem before running any tests as it is required by many tests
+	initSeFileSystem();
 
 	const testsRoot = path.resolve(__dirname, '..');
 

@@ -4,28 +4,12 @@ import * as vscode from 'vscode';
 import {DocumentCompletionHandler, DocumentCompletionInfo, TokenInfo} from '../../documentCompletionHandler';
 import {HelpCompletionInfo, MacroFuncCompletionInfo} from '../../seHelp';
 import fs = require('fs');
-
-function replaceOutWithSrc(inPath: string)
-{
-  let outPathStart = inPath.lastIndexOf("/out/");
-  let slashSymbol = "/";
-  if (outPathStart === -1) {
-    outPathStart = inPath.lastIndexOf("\\out\\");
-    if (outPathStart === -1) {
-      return inPath;
-    }
-    slashSymbol = "\\";
-  }
-
-  return inPath.substring(0, outPathStart) + slashSymbol + "src" + slashSymbol + inPath.substring(outPathStart + 5) + slashSymbol;
-}
+import { softPathToUri, softPathToHardPath } from '../../sefilesystem';
 
 async function testDocumentParsing() {
   try {
     test('Opening document', async function() {
-      let baseTestPath = replaceOutWithSrc(__dirname);
-      let sampleScriptPath = baseTestPath + "sampleScripts/SignatureTestScript.lua";
-      let sampleScriptUri = vscode.Uri.file(sampleScriptPath);
+      let sampleScriptUri = softPathToUri("Content/SignatureTestScript.lua");
       let textDocument = await vscode.workspace.openTextDocument(sampleScriptUri);  
       assert(textDocument, "Unable to open document");
       let documentCompletionHandler = new DocumentCompletionHandler(textDocument);
@@ -40,7 +24,7 @@ async function testDocumentParsing() {
       }
 
       let helpCompletionInfo: HelpCompletionInfo = new HelpCompletionInfo();
-      helpCompletionInfo.addHelpFromFile(baseTestPath + "sampleHelp/Sample_macros.xml");
+      helpCompletionInfo.addHelpFromFile(softPathToHardPath("Help/Sample_macros.xml"));
       assert(helpCompletionInfo.macroClasses.length === 2);
 
       {
@@ -103,8 +87,7 @@ async function testWorldScriptsParsing() {
   test('World scripts parsing', async function() {
     try {
 
-    let baseTestPath = replaceOutWithSrc(__dirname);
-    let scriptDumpFileName = baseTestPath + "sampleHelp/ScriptDumpTest.wld.json";
+    let scriptDumpFileName = softPathToHardPath("Temp/WorldScripts/ScriptDumpTest.wld.json");
     let scriptDumpString = fs.readFileSync(scriptDumpFileName, "utf8");
     scriptDumpString = scriptDumpString.replace(/^\uFEFF/, '');
     let scriptDumpJson = JSON.parse(scriptDumpString);

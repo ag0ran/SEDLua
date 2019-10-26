@@ -2,6 +2,7 @@ import * as assert from 'assert';
 let luaparse = require('../../luaparse');
 import * as vscode from 'vscode';
 import fs = require('fs');
+import { softPathToUri } from '../../sefilesystem';
 
 function replaceOutWithSrc(inPath: string)
 {
@@ -21,7 +22,7 @@ function replaceOutWithSrc(inPath: string)
 let baseTestPath = replaceOutWithSrc(__dirname);
 
 function readTestFile(filePath: string): string {
-  let fileUri =  vscode.Uri.file(baseTestPath + filePath);
+  let fileUri = softPathToUri(filePath);
   return fs.readFileSync(fileUri.fsPath, "utf8");
 }
 
@@ -46,7 +47,7 @@ function testParseErrors()
         ranges: true,
         errorsNotExceptions: true,
     };
-      let testFileString = readTestFile("sampleScripts/ParsingErrors_00.lua");
+      let testFileString = readTestFile("Content/ParsingErrors_00.lua");
       let ast = luaparse.parse(testFileString, parseOptions);
       assert(ast);
       assert(ast.parse_errors);
