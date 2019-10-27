@@ -513,7 +513,8 @@ function getCvarFuncSignatureString(cvarFunc: CvarFunctionCompletionInfo) {
 }
 
 function getMacroFuncSignatureString(macroFunc: MacroFuncCompletionInfo) {
-  return macroFunc.returnType + " " + macroFunc.name + "(" + macroFunc.params + ")";
+  let macroClassPrefix = macroFunc.macroClass ? `${macroFunc.macroClass.name}::` : "";
+  return macroFunc.returnType + " " + macroClassPrefix + macroFunc.name + "(" + macroFunc.params + ")";
 }
 
 function isIndexingChar(char: string) {return char === '.' || char === ':';}

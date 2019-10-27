@@ -36,6 +36,7 @@ export class MacroFuncCompletionInfo {
   params: string = "";
   briefComment: string = "";
   detailComment: string = "";
+  macroClass: MacroClassCompletionInfo|undefined;
 }
 
 export class MacroClassCompletionInfo {
@@ -162,7 +163,7 @@ export class HelpCompletionInfo {
       classInfo.baseClass = cl.BASE_CLASS;
       classInfo.briefComment = normalizeXmlValue(cl.COMMENT);
       if (cl.FUNCTIONS && cl.FUNCTIONS.FUNCTION) {
-        this.addMacroFunctions(cl.FUNCTIONS.FUNCTION, classInfo.memberFunctions);
+        this.addMacroFunctions(cl.FUNCTIONS.FUNCTION, classInfo.memberFunctions, classInfo);
       }
       if (cl.EVENTS && cl.EVENTS.EVENT) {
         if (Array.isArray(cl.EVENTS.EVENT)) {
@@ -186,7 +187,7 @@ export class HelpCompletionInfo {
     }
   }
 
-  private addMacroFunctions(functions: any, functionsArray: MacroFuncCompletionInfo[]) {
+  private addMacroFunctions(functions: any, functionsArray: MacroFuncCompletionInfo[], macroClass?: MacroClassCompletionInfo) {
     let addFunc = (func: any) => {
       let funcInfo = new MacroFuncCompletionInfo();
       funcInfo.name = func.NAME;
@@ -194,6 +195,7 @@ export class HelpCompletionInfo {
       funcInfo.params = normalizeXmlValue(func.PARAMS);
       funcInfo.briefComment = normalizeXmlValue(func.BRIEF_COMMENT);
       funcInfo.detailComment = normalizeXmlValue(func.DETAIL_COMMENT);
+      funcInfo.macroClass = macroClass;
       functionsArray.push(funcInfo);
     };
     
