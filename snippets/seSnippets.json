@@ -1,0 +1,27 @@
+{
+  "RunHandled": {
+    "body": "RunHandled(\n\t${1|WaitForever,function()\nend|},\n\t${2|OnEvery,On|}(${3:condition}),\n\tfunction(payload)\n\t\t${4:--body}\n\tend\n)",
+    "description": "While function passed as first argument blocks execution, executes the handler functions in the parameters that follow (pair of On, OnEvery event and a function).",
+    "prefix": "RunHandled"
+  },
+  "RunAsync": {
+    "body": "RunAsync(${1|func,function()\n\t\nend|})",
+    "description": "Starts the execution of the provided function in another thread and immediatelly resumes execution of current thread.",
+    "prefix": "RunAsync"
+  },
+  "Event": {
+    "body": "Event($1)",
+    "description": "Designates an event on an object",
+    "prefix": "Event"
+  },
+  "Delay": {
+    "body": "Delay($1)",
+    "description": "Delay in seconds to wait upon.",
+    "prefix": "Delay"
+  },
+  "Wait": {
+    "body": "Wait($1)",
+    "description": "Blocks execution until the waited condition is fulfilled.",
+    "prefix": "Wait"
+  }
+}

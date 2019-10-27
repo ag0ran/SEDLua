@@ -12,6 +12,7 @@
     "vscode": "^1.38.0"
   },
   "categories": [
+    "Snippets",
     "Other"
   ],
   "activationEvents": [
@@ -19,14 +20,14 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
-    "commands": [
+    "snippets": [
       {
-        "command": "extension.showDocumentation",
-        "title": "SEDLua: Show Documentation"
+        "language": "lua",
+        "path": "./snippets/snippets.json"
       },
       {
-        "command": "extension.loadDocumentation",
-        "title": "SEDLua: Load Documentation"
+        "language": "lua",
+        "path": "./snippets/seSnippets.json"
       }
     ],
     "views": {
