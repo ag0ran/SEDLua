@@ -85,8 +85,10 @@ function addWorldScriptsList(worldScriptsList : WorldScriptsList)
 }
 
 
-export async function refreshWorldScripts()
+// Refreshes world scripts from file. Returns whether anything had changed.
+export async function refreshWorldScripts(): Promise<boolean>
 {
+  let anythingChanged = false;
   // check world dumped world scripts
   let forEachFileOptions: seFilesystem.ForEachFileOptions = {
     startingDirUri: seFilesystem.softPathToUri("Temp/WorldScripts"),
@@ -97,6 +99,7 @@ export async function refreshWorldScripts()
         if (fileStats.mtime === lastModificationTime) {
           return;
         }
+        anythingChanged = true;
         processedWorldScripts.set(fileUri, fileStats.mtime);
         let worldScriptDumpString = fs.readFileSync(fileUri.fsPath, "utf8");
         // removing BOM
@@ -111,4 +114,5 @@ export async function refreshWorldScripts()
     fileFilter: new Set([".json"]),
   };
   await seFilesystem.forEachFileRecursiveAsync(forEachFileOptions);
+  return anythingChanged;
 }

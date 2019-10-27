@@ -10,6 +10,7 @@ import {log} from "./log";
 import fs = require('fs');
 import { performance } from 'perf_hooks';
 import { refreshWorldScripts } from './worldScripts';
+import { WorldScriptsView } from './worldScriptsView';
 
 class SEDLua implements vscode.CompletionItemProvider {
   constructor(context: vscode.ExtensionContext) {
@@ -26,6 +27,8 @@ class SEDLua implements vscode.CompletionItemProvider {
 
     context.subscriptions.push(
       vscode.commands.registerCommand("extension.loadDocumentation", this.loadDocumentation, this));
+
+    this.worldScriptsView = new WorldScriptsView(context);
 
 
     this.initWorkspace();
@@ -125,9 +128,13 @@ class SEDLua implements vscode.CompletionItemProvider {
   }
 
   private workspaceCheckTimeoutId: NodeJS.Timeout|undefined;
+  private worldScriptsView: WorldScriptsView;
 
   private async workspaceCheckTimeoutCallback() {
-    await refreshWorldScripts();
+    let worldScriptsChanged = await refreshWorldScripts();
+    if (worldScriptsChanged) {
+      this.worldScriptsView.refresh();
+    }
   }
 
   private async initWorkspace() {

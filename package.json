@@ -28,7 +28,15 @@
         "command": "extension.loadDocumentation",
         "title": "SEDLua: Load Documentation"
       }
-    ]
+    ],
+    "views": {
+      "explorer": [
+        {
+          "id": "worldScripts",
+          "name": "World scripts"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
