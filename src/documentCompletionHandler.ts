@@ -1,6 +1,6 @@
 let luaparse = require('./luaparse');
 import * as vscode from 'vscode';
-import { MacroFuncCompletionInfo, CvarFunctionCompletionInfo, MacroClassCompletionInfo, HelpCompletionInfo } from './seHelp';
+import { helpCompletionInfo, MacroFuncCompletionInfo, CvarFunctionCompletionInfo, MacroClassCompletionInfo, HelpCompletionInfo } from './seHelp';
 import {worldScriptsStorage} from './worldScripts';
 import * as seFilesystem from './sefilesystem';
 
@@ -63,6 +63,7 @@ export class DocumentCompletionInfo {
   tokens: any[] = [];
   error: DocumentParsingError|undefined;
   errors: Array<DocumentParsingError>|undefined;
+  warnings: Array<DocumentParsingError>|undefined;
   documentSoftPath: string;
 
   getVariableInfo(variableName: string): VariableInfo|undefined {
@@ -126,7 +127,7 @@ export class DocumentCompletionInfo {
   }
 
   // Tries to find a function call of a know function at given offset. Returns the function info and the current parameter index if function is found.
-  getFunctionCallInfoAtOffset(offset: number, helpCompletionInfo: HelpCompletionInfo):
+  getFunctionCallInfoAtOffset(offset: number):
     [MacroFuncCompletionInfo|CvarFunctionCompletionInfo, number]|undefined
   {
     // go through the tokens starting at the current offset, trying to find opening '(' character preceeded by a known function
@@ -204,7 +205,7 @@ export class DocumentCompletionInfo {
       return undefined;
     }
     // try to resolve indexing expression starting at the token before the call start
-    let expressionBeforeInfo = this.resolveIndexingExpressionAtToken(iCurrentToken - 1, helpCompletionInfo);
+    let expressionBeforeInfo = this.resolveIndexingExpressionAtToken(iCurrentToken - 1);
     if (!expressionBeforeInfo) {
       return undefined;
     }
@@ -217,7 +218,7 @@ export class DocumentCompletionInfo {
     }
   }
 
-  resolveMemberExpressionAtOffset(offset: number, helpCompletionInfo: HelpCompletionInfo):
+  resolveMemberExpressionAtOffset(offset: number):
   VariableInfo|MacroFuncCompletionInfo|CvarFunctionCompletionInfo|MacroClassCompletionInfo|string|undefined
   {
     if (!this.ast) {
@@ -309,7 +310,7 @@ export class DocumentCompletionInfo {
     return undefined;
   }
 
-  resolveIndexingExpressionAtToken(iStartingToken: number, helpCompletionInfo: HelpCompletionInfo):
+  resolveIndexingExpressionAtToken(iStartingToken: number):
     MacroFuncCompletionInfo|CvarFunctionCompletionInfo|MacroClassCompletionInfo|string|undefined
   {
     let startingToken = this.tokens[iStartingToken];
@@ -451,7 +452,23 @@ export class DocumentCompletionHandler {
           if (commentMatch) {
             let varName: string = commentMatch[1];
             let varType: string = commentMatch[2];
-            result.variables.set(varName, new VariableInfo(varType));
+            if (helpCompletionInfo.findMacroClassInfo(varType)) {
+              result.variables.set(varName, new VariableInfo(varType));
+            } else {
+              if (!result.warnings) {
+                result.warnings = [];
+              }
+              let loc = node.loc;
+              let errorRange = [loc.start.line - 1, loc.start.column, loc.end.line - 1, loc.end.column];
+              let errorMessage = `unrecognized type ${varType}`;
+              function rangesEqual(rangeA: number[], rangeB: number[]) {
+                return rangeA.length === 4 && rangeA.length === rangeB.length && rangeA[0] === rangeB[0]
+                  && rangeA[1] === rangeB[1] && rangeA[2] === rangeB[2] && rangeA[3] === rangeB[3];
+              }
+              if (!result.warnings.find((docParsingError) => docParsingError.message === errorMessage && rangesEqual(docParsingError.range, errorRange))) {
+                result.warnings.push(new DocumentParsingError(errorRange, errorMessage));
+              }
+            }
           }
           break;
         case "CallExpression":
@@ -479,7 +496,7 @@ export class DocumentCompletionHandler {
     let parseOptions = {
       wait: false,
       scope: true,
-      location: true,
+      locations: true,
       ranges: true,
       errorsNotExceptions: true,
       onCreateNode: onCreateNodeCallback

@@ -4,7 +4,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as seFilesystem from './sefilesystem';
 import {DocumentCompletionHandler, DocumentCompletionInfo, TokenInfo, VariableInfo, DocumentParsingError} from './documentCompletionHandler';
-import {HelpCompletionInfo, MacroFuncCompletionInfo, CvarFunctionCompletionInfo,
+import {helpCompletionInfo, loadHelpCompletionInfo, HelpCompletionInfo, MacroFuncCompletionInfo, CvarFunctionCompletionInfo,
   CvarCompletionInfo, MacroClassCompletionInfo} from './seHelp';
 import {log} from "./log";
 import fs = require('fs');
@@ -55,7 +55,7 @@ class SEDLua implements vscode.CompletionItemProvider {
     }
 
     let offset = document.offsetAt(position);
-    let functionCallInfo = completionInfo.getFunctionCallInfoAtOffset(offset, this.helpCompletionInfo);
+    let functionCallInfo = completionInfo.getFunctionCallInfoAtOffset(offset);
     if (!functionCallInfo) {
       return undefined;
     }
@@ -106,7 +106,7 @@ class SEDLua implements vscode.CompletionItemProvider {
     if (iTokenAtOffset === -1) {
       return undefined;
     }
-    let lastInfo = completionInfo.resolveMemberExpressionAtOffset(offset, this.helpCompletionInfo);
+    let lastInfo = completionInfo.resolveMemberExpressionAtOffset(offset);
 
     let hover: vscode.Hover|undefined;
     if (lastInfo instanceof MacroClassCompletionInfo) {
@@ -158,8 +158,7 @@ class SEDLua implements vscode.CompletionItemProvider {
     this.workspaceScripts = new Set<string>();
     SEDLua.collectWorkspaceScripts(this.workspaceScripts);
 
-    this.helpCompletionInfo = new HelpCompletionInfo();
-    await SEDLua.collectHelpFiles(this.helpCompletionInfo);
+    await SEDLua.collectHelpFiles();
 
     this.workspaceCheckTimeoutId = setTimeout(this.workspaceCheckTimeoutCallback.bind(this), 300);
   }
@@ -203,7 +202,7 @@ class SEDLua implements vscode.CompletionItemProvider {
       .then(fileUris => {
         if (fileUris) {
           for (let fileUri of fileUris) {
-            this.helpCompletionInfo.addHelpFromFile(fileUri.fsPath);
+            helpCompletionInfo.addHelpFromFile(fileUri.fsPath);
           }
         }
       });
@@ -241,13 +240,25 @@ class SEDLua implements vscode.CompletionItemProvider {
       let diagnosticRange = new vscode.Range(errorRange[0], errorRange[1], errorRange[2], errorRange[3]);
       let diagnostic = new vscode.Diagnostic(diagnosticRange,
         documentCompletionInfo.error.message, vscode.DiagnosticSeverity.Error);
-      diagnostics = [diagnostic];
-    } else if (documentCompletionInfo.errors) {
+      diagnostics.push(diagnostic);
+    }
+    
+    if (documentCompletionInfo.errors) {
       for (const err of documentCompletionInfo.errors) {
         let errorRange = err.range;
         let diagnosticRange = new vscode.Range(errorRange[0], errorRange[1], errorRange[2], errorRange[3]);
         let diagnostic = new vscode.Diagnostic(diagnosticRange,
           err.message, vscode.DiagnosticSeverity.Error);
+        diagnostics.push(diagnostic);
+      }
+    }
+
+    if (documentCompletionInfo.warnings) {
+      for (const err of documentCompletionInfo.warnings) {
+        let errorRange = err.range;
+        let diagnosticRange = new vscode.Range(errorRange[0], errorRange[1], errorRange[2], errorRange[3]);
+        let diagnostic = new vscode.Diagnostic(diagnosticRange,
+          err.message, vscode.DiagnosticSeverity.Warning);
         diagnostics.push(diagnostic);
       }
     }
@@ -269,7 +280,6 @@ class SEDLua implements vscode.CompletionItemProvider {
 
   // holds completion handlers per document path
   private documentCompletionHandlers: Map<string, DocumentCompletionHandler> = new Map<string, DocumentCompletionHandler>();
-  private helpCompletionInfo = new HelpCompletionInfo();
 
   private workspaceScripts : Set<string> = new Set<string>();
 
@@ -296,17 +306,10 @@ class SEDLua implements vscode.CompletionItemProvider {
   }
 
   // Collects information from all xml help files (cvars and macros).
-  private static async collectHelpFiles(helpCompletionInfo: HelpCompletionInfo) {
+  private static async collectHelpFiles() {
     let startTime = performance.now();
     log.printLine("Collecting help files...");
-    let forEachFileOptions: seFilesystem.ForEachFileOptions = {
-      startingDirUri: seFilesystem.softPathToUri("Help/"),
-      fileFilter: new Set([".xml"]),
-      forFileFunc: (fileUri: vscode.Uri) => {
-        helpCompletionInfo.addHelpFromFile(fileUri.fsPath);
-      }
-    };
-    await seFilesystem.forEachFileRecursiveAsync(forEachFileOptions);
+    await loadHelpCompletionInfo();
     let durationSeconds = (performance.now() - startTime)/1000;
     log.printLine("Processed " + helpCompletionInfo.processedFiles.size + " help files in " + durationSeconds.toFixed(1) + " seconds.");
     log.printLine("  Found " + helpCompletionInfo.cvars.length + " cvars, " + helpCompletionInfo.cvarFunctions.length + " cvar functions.");
@@ -340,7 +343,7 @@ class SEDLua implements vscode.CompletionItemProvider {
       return;
     }
     let classCompletionItems = new Array<vscode.CompletionItem>();
-    for (const macroClass of this.helpCompletionInfo.macroClasses) {
+    for (const macroClass of helpCompletionInfo.macroClasses) {
       let classCompletionItem = new vscode.CompletionItem(macroClass.name);
       classCompletionItem.kind = vscode.CompletionItemKind.Class;
       classCompletionItem.documentation = createCppMarkdownWithComment(`class ${macroClass.name}`, macroClass.briefComment);
@@ -390,15 +393,15 @@ class SEDLua implements vscode.CompletionItemProvider {
           let classCompletionItems = new Array<vscode.CompletionItem>();
           let varInfo = completionInfo.getVariableInfo(indexedVarToken.value);
           if (varInfo && varInfo.type) {
-            let macroClassInfo = this.helpCompletionInfo.findMacroClassInfo(varInfo.type);
+            let macroClassInfo = helpCompletionInfo.findMacroClassInfo(varInfo.type);
             if (macroClassInfo) {
               if (indexingChar === ":") {
-                this.helpCompletionInfo.forEachMacroClassFunction(macroClassInfo, (funcInfo) => {
+                helpCompletionInfo.forEachMacroClassFunction(macroClassInfo, (funcInfo) => {
                   let funcCompletionItem = createMacroFuncCompletionItem(funcInfo);
                   classCompletionItems.push(funcCompletionItem);
                 });
               } else {
-                this.helpCompletionInfo.forEachMacroClassEvent(macroClassInfo, (event) => {
+                helpCompletionInfo.forEachMacroClassEvent(macroClassInfo, (event) => {
                   let eventCompletionItem = new vscode.CompletionItem(event);
                   eventCompletionItem.kind = vscode.CompletionItemKind.Event;
                   classCompletionItems.push(eventCompletionItem);
@@ -454,15 +457,15 @@ class SEDLua implements vscode.CompletionItemProvider {
       funcAndVarCompletionItems.push(funcCompletionItem);
     }
 
-    for (let cvar of this.helpCompletionInfo.cvars) {
+    for (let cvar of helpCompletionInfo.cvars) {
       funcAndVarCompletionItems.push(createCvarCompletionItem(cvar));
     }
 
-    for (let cvarFunc of this.helpCompletionInfo.cvarFunctions) {
+    for (let cvarFunc of helpCompletionInfo.cvarFunctions) {
       funcAndVarCompletionItems.push(createCvarFuncCompletionItem(cvarFunc));
     }
 
-    for (let macroFunc of this.helpCompletionInfo.macroFunctions) {
+    for (let macroFunc of helpCompletionInfo.macroFunctions) {
       funcAndVarCompletionItems.push(createMacroFuncCompletionItem(macroFunc));
     }
 

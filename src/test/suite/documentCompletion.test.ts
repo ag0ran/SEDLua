@@ -2,7 +2,7 @@ import * as assert from 'assert';
 
 import * as vscode from 'vscode';
 import {DocumentCompletionHandler, DocumentCompletionInfo, TokenInfo} from '../../documentCompletionHandler';
-import {HelpCompletionInfo, MacroFuncCompletionInfo} from '../../seHelp';
+import {helpCompletionInfo, HelpCompletionInfo, MacroFuncCompletionInfo, loadHelpCompletionInfo} from '../../seHelp';
 import fs = require('fs');
 import { softPathToUri, softPathToHardPath } from '../../sefilesystem';
 
@@ -23,12 +23,8 @@ async function testDocumentParsing() {
         assert(tokenAt_ln2_col16.value === "derivedSampleObject");
       }
 
-      let helpCompletionInfo: HelpCompletionInfo = new HelpCompletionInfo();
-      helpCompletionInfo.addHelpFromFile(softPathToHardPath("Help/Sample_macros.xml"));
-      assert(helpCompletionInfo.macroClasses.length === 2);
-
       {
-        let functionCallInfo = completionInfo.getFunctionCallInfoAtOffset(textDocument.offsetAt(new vscode.Position(2, 43)), helpCompletionInfo);
+        let functionCallInfo = completionInfo.getFunctionCallInfoAtOffset(textDocument.offsetAt(new vscode.Position(2, 43)));
         assert(functionCallInfo);
         if (functionCallInfo) {
           let [funcInfo, parameter] = functionCallInfo;
@@ -39,7 +35,7 @@ async function testDocumentParsing() {
       }
 
       {
-        let functionCallInfo = completionInfo.getFunctionCallInfoAtOffset(textDocument.offsetAt(new vscode.Position(5, 27)), helpCompletionInfo);
+        let functionCallInfo = completionInfo.getFunctionCallInfoAtOffset(textDocument.offsetAt(new vscode.Position(5, 27)));
         assert(functionCallInfo);
         if (functionCallInfo) {
           let [funcInfo, parameter] = functionCallInfo;
@@ -49,7 +45,7 @@ async function testDocumentParsing() {
         }
       }
       {
-        let functionCallInfo = completionInfo.getFunctionCallInfoAtOffset(textDocument.offsetAt(new vscode.Position(6, 31)), helpCompletionInfo);
+        let functionCallInfo = completionInfo.getFunctionCallInfoAtOffset(textDocument.offsetAt(new vscode.Position(6, 31)));
         assert(functionCallInfo);
         if (functionCallInfo) {
           let [funcInfo, parameter] = functionCallInfo;
@@ -59,12 +55,12 @@ async function testDocumentParsing() {
         }
       }
       {
-        let functionCallInfo = completionInfo.getFunctionCallInfoAtOffset(textDocument.offsetAt(new vscode.Position(5, 11)), helpCompletionInfo);
+        let functionCallInfo = completionInfo.getFunctionCallInfoAtOffset(textDocument.offsetAt(new vscode.Position(5, 11)));
         assert(!functionCallInfo);
       }
 
       {
-        let functionCallInfo = completionInfo.getFunctionCallInfoAtOffset(textDocument.offsetAt(new vscode.Position(8, 42)), helpCompletionInfo);
+        let functionCallInfo = completionInfo.getFunctionCallInfoAtOffset(textDocument.offsetAt(new vscode.Position(8, 42)));
         assert(functionCallInfo);
         if (functionCallInfo) {
           let [funcInfo, parameter] = functionCallInfo;
@@ -74,7 +70,7 @@ async function testDocumentParsing() {
         }
       }
       {
-        let functionCallInfo = completionInfo.getFunctionCallInfoAtOffset(textDocument.offsetAt(new vscode.Position(12, 28)), helpCompletionInfo);
+        let functionCallInfo = completionInfo.getFunctionCallInfoAtOffset(textDocument.offsetAt(new vscode.Position(12, 28)));
         assert(!functionCallInfo);
       }
     });

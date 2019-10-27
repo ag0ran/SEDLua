@@ -1,6 +1,7 @@
 import xml2js = require('xml2js');
 import fs = require('fs');
 import * as vscode from 'vscode';
+import * as seFilesystem from './sefilesystem';
 
 function normalizeXmlValue(s: string) {
   return s.trim();
@@ -249,4 +250,17 @@ export class HelpCompletionInfo {
       addCvar(cvars);
     }
   }
+}
+
+export let helpCompletionInfo = new HelpCompletionInfo();
+
+export async function loadHelpCompletionInfo() {
+  let forEachFileOptions: seFilesystem.ForEachFileOptions = {
+    startingDirUri: seFilesystem.softPathToUri("Help/"),
+    fileFilter: new Set([".xml"]),
+    forFileFunc: (fileUri: vscode.Uri) => {
+      helpCompletionInfo.addHelpFromFile(fileUri.fsPath);
+    }
+  };
+  await seFilesystem.forEachFileRecursiveAsync(forEachFileOptions);
 }

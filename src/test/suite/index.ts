@@ -4,6 +4,7 @@ import * as glob from 'glob';
 import { initFilesystem } from '../../sefilesystem';
 import * as vscode from 'vscode';
 import * as assert from 'assert';
+import {loadHelpCompletionInfo, helpCompletionInfo} from '../../seHelp';
 
 // Since tests are being run from the output directory, we need to find the test directory path.
 function extractTestsRoot()
@@ -28,7 +29,7 @@ function initSeFileSystem () {
 	assert(initFilesystem(vscode.Uri.file(testsRoot!)));
 }
 
-export function run(): Promise<void> {
+export async function run(): Promise<void> {
 	// Create the mocha test
 	const mocha = new Mocha({
 		ui: 'tdd',
@@ -37,6 +38,9 @@ export function run(): Promise<void> {
 
 	// we have to init the Se filesystem before running any tests as it is required by many tests
 	initSeFileSystem();
+
+	await loadHelpCompletionInfo();
+	assert(helpCompletionInfo.macroClasses.length === 2);
 
 	const testsRoot = path.resolve(__dirname, '..');
 
