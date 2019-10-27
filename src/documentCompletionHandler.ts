@@ -446,7 +446,8 @@ export class DocumentCompletionHandler {
           break;
         case "Comment":
           let comment: string = node.value;
-          let commentMatch = comment.match(/(\w+)\s*:\s*(\w+)/);
+          // we have to be careful not to match a commented out call of a member function, therefore only whitespace is allowed before the end of the comment
+          let commentMatch = comment.match(/(\w+)\s*:\s*(\w+)\s*$/);
           if (commentMatch) {
             let varName: string = commentMatch[1];
             let varType: string = commentMatch[2];
