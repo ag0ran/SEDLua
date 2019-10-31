@@ -12,6 +12,8 @@ import { performance } from 'perf_hooks';
 import { refreshWorldScripts } from './worldScripts';
 import { WorldScriptsView } from './worldScriptsView';
 import { config, loadConfig} from './configuration';
+const util = require('util');
+const exec = util.promisify(require('child_process').exec);
 
 class SEDLua implements vscode.CompletionItemProvider {
   constructor(context: vscode.ExtensionContext) {
@@ -230,8 +232,23 @@ class SEDLua implements vscode.CompletionItemProvider {
     }
 
     if (e.contentChanges.length > 0 && config.editReadOnlyFiles !== "allow edits" && e.document.isDirty && isReadOnly(e.document)) {
-      vscode.window.showErrorMessage(`${e.document.fileName} is read only.`);
-      vscode.commands.executeCommand('workbench.action.files.revert');
+      let allowEdit = false;
+      if (config.editReadOnlyFiles === "disable edits and ask to check out") {
+        const checkOutOption = "Check out";
+        let option = await vscode.window.showErrorMessage(`${e.document.fileName} is read only.`, {modal: true}, checkOutOption);
+        if (option === checkOutOption) {
+          const { stdout, stderr } = await exec(`p4 edit ${e.document.fileName}`);
+          if (!stderr || stderr === "") {
+            log.printLine("Result of perforce command:\n" + stdout);
+            allowEdit = true;
+          } else {
+            log.printLine("Error checking out file:" + stderr);
+          }
+        }
+      }
+      if (!allowEdit) {
+        await vscode.commands.executeCommand('workbench.action.files.revert');
+      }
     }
 
     let documentCompletionHandler = this.getOrCreateDocumentCompletionHandler(e.document);
