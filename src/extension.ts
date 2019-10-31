@@ -11,6 +11,7 @@ import fs = require('fs');
 import { performance } from 'perf_hooks';
 import { refreshWorldScripts } from './worldScripts';
 import { WorldScriptsView } from './worldScriptsView';
+import { config, loadConfig} from './configuration';
 
 class SEDLua implements vscode.CompletionItemProvider {
   constructor(context: vscode.ExtensionContext) {
@@ -30,6 +31,9 @@ class SEDLua implements vscode.CompletionItemProvider {
 
     this.worldScriptsView = new WorldScriptsView(context);
 
+    loadConfig();
+    context.subscriptions.push(
+      vscode.workspace.onDidChangeConfiguration(loadConfig));
 
     this.initWorkspace();
 
@@ -224,6 +228,12 @@ class SEDLua implements vscode.CompletionItemProvider {
     if (!this.isDocumentSupported(e.document)) {
       return;
     }
+
+    if (e.contentChanges.length > 0 && config.editReadOnlyFiles !== "allow edits" && e.document.isDirty && isReadOnly(e.document)) {
+      vscode.window.showErrorMessage(`${e.document.fileName} is read only.`);
+      vscode.commands.executeCommand('workbench.action.files.revert');
+    }
+
     let documentCompletionHandler = this.getOrCreateDocumentCompletionHandler(e.document);
     if (!documentCompletionHandler) {
       return;
@@ -532,6 +542,15 @@ function extractParamByIndex(params: string, iParam: number): string|undefined {
     return undefined;
   }
   return param;
+}
+
+function isReadOnly(document: vscode.TextDocument) {
+  try {
+      fs.accessSync(document.fileName, fs.constants.W_OK);
+      return false;
+  } catch (error) {
+      return true;
+  }
 }
 
 // Called when extension is first activated.

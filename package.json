@@ -37,6 +37,21 @@
           "name": "World scripts"
         }
       ]
+    },
+    "configuration": {
+      "title": "SED lua",
+      "type": "object",
+      "properties": {
+        "sedlua.editReadOnlyFiles": {
+          "enum": [
+            "allow edits",
+            "disable edits",
+            "disable edits and ask to check out"
+          ],
+          "description": "Editing of read only files behavior",
+          "default": "allow edits"
+        }
+      }
     }
   },
   "scripts": {
