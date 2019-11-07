@@ -106,12 +106,12 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
   var EOF = 1, StringLiteral = 2, Keyword = 4, Identifier = 8
     , NumericLiteral = 16, Punctuator = 32, BooleanLiteral = 64
-    , NilLiteral = 128, VarargLiteral = 256;
+    , NilLiteral = 128, VarargLiteral = 256, Unexpected = 512;
 
   exports.tokenTypes = { EOF: EOF, StringLiteral: StringLiteral
     , Keyword: Keyword, Identifier: Identifier, NumericLiteral: NumericLiteral
     , Punctuator: Punctuator, BooleanLiteral: BooleanLiteral
-    , NilLiteral: NilLiteral, VarargLiteral: VarargLiteral
+    , NilLiteral: NilLiteral, VarargLiteral: VarargLiteral, Unexpected: Unexpected
   };
 
   // As this parser is a bit different from luas own, the error messages
@@ -523,8 +523,8 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
   //
   // If there's no token in the buffer it means we have reached <eof>.
 
-  function unexpected(found, near) {
-    if ('undefined' === typeof near) near = lookahead.value;
+  function unexpected(found, near) {    
+    if ('undefined' === typeof near && lookahead) near = lookahead.value;
     if ('undefined' !== typeof found.type) {
       var type;
       switch (found.type) {
@@ -653,7 +653,16 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
         return scanPunctuator(input.charAt(index));
     }
 
-    return unexpected(input.charAt(index));
+    let value = input.charAt(index);
+    unexpected(value);
+    index += 1;
+    return {
+        type: Unexpected
+      , value: value
+      , line: line
+      , lineStart: lineStart
+      , range: [tokenStart, index]
+    };
   }
 
   // Whitespace has no semantic meaning in lua so simply skip ahead while
@@ -1057,7 +1066,11 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
   function next() {
     previousToken = token;
     token = lookahead;
-    lookahead = lex();
+    let nextLookahead;
+    do {
+      nextLookahead = lex();
+    } while (nextLookahead && nextLookahead.type === Unexpected);
+    lookahead = nextLookahead;
   }
 
   // Consume a token if its value matches. Once consumed or not, return the
