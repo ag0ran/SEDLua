@@ -511,7 +511,9 @@ export class DocumentCompletionHandler {
         
       }
     } catch (err) {
-      result.error = new DocumentParsingError([err.line - 1, err.column, err.line - 1, err.column + 10000], err.message);
+      if (err.line && err.column) {
+        result.error = new DocumentParsingError([err.line - 1, err.column, err.line - 1, err.column + 10000], err.message);
+      }
     } finally {
       parseOptions.wait = true;
       let manualParser = luaparse.parse(documentText, parseOptions);
