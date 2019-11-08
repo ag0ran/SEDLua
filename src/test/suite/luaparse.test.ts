@@ -56,6 +56,25 @@ function testParseErrors()
       expectParseError(ast.parse_errors[1], 6, 3, "<expression> expected near 'end'");
     }
   });
+
+  test('Unexpected tokens', function() {
+    {
+      let parseOptions = {
+        wait: false,
+        scope: true,
+        location: true,
+        ranges: true,
+        errorsNotExceptions: true,
+    };
+      let testFileString = readTestFile("Content/ParsingErrors_UnexpectedTokens.lua");
+      let ast = luaparse.parse(testFileString, parseOptions);
+      assert(ast);
+      assert(ast.parse_errors);
+      assert(ast.parse_errors.length === 2);
+      expectParseError(ast.parse_errors[0], 1, 2, "<expression> expected near ')'");
+      expectParseError(ast.parse_errors[1], 2, 20, "unexpected symbol '!' near 'or'");
+    }
+  });
 }
 
 suite('luaparse', () => {

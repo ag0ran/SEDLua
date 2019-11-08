@@ -1633,9 +1633,14 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       , expression, marker;
 
     if (trackLocations) marker = createLocationMarker();
+    let errorsBefore = parse_errors.length;
     expression = parsePrefixExpression();
 
     if (null == expression) {
+      // no need to report more errors if some errors were already reported
+      if (parse_errors.length > errorsBefore) {
+        return;
+      }
       unexpected(token);
       next();
       return;
@@ -1954,7 +1959,11 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
     } else if (consume('(')) {
       base = parseExpectedExpression();
       expect(')');
-      base.inParens = true; // XXX: quick and dirty. needed for validateVar
+      if (base !== undefined) {
+        base.inParens = true; // XXX: quick and dirty. needed for validateVar
+      } else {
+        return null;
+      }
     } else {
       return null;
     }
