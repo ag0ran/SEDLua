@@ -75,6 +75,26 @@ function testParseErrors()
       expectParseError(ast.parse_errors[1], 2, 20, "unexpected symbol '!' near 'or'");
     }
   });
+
+  test('Unfinished local', function() {
+    {
+      let parseOptions = {
+        wait: false,
+        scope: true,
+        location: true,
+        ranges: true,
+        errorsNotExceptions: true,
+    };
+      let testFileString = readTestFile("Content/ParsingErrors_UnfinishedLocal.lua");
+      try {
+        let ast = luaparse.parse(testFileString, parseOptions);
+        assert(ast);
+        assert(ast.parse_errors.length === 1);
+      } catch (err) {
+        assert(false, "Parse error: " + err.message);
+      }
+    }
+  });
 }
 
 suite('luaparse', () => {

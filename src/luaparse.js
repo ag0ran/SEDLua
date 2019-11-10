@@ -2159,10 +2159,12 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
     if (options.comments) chunk.comments = comments;
     if (options.scope) chunk.globals = globals;
 
-    if (locations.length > 0)
-      throw new Error('Location tracking failed. This is most likely a bug in luaparse');
-    if (parse_errors.length) {
+    if (parse_errors.length > 0) {
        chunk.parse_errors = parse_errors;
+    } else {
+      if (locations.length > 0) {
+        throw new Error('Location tracking failed. This is most likely a bug in luaparse');
+      }
     }
     return chunk;
   }
