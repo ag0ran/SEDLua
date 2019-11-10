@@ -777,6 +777,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
       else if (index >= length || isLineTerminator(charCode)) {
         string += input.slice(stringStart, index - 1);
         raise({}, errors.unfinishedString, string + String.fromCharCode(charCode));
+        break;
       }
     }
     string += input.slice(stringStart, index - 1);
@@ -797,7 +798,16 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
   function scanLongStringLiteral() {
     var string = readLongString();
     // Fail if it's not a multiline literal.
-    if (false === string) raise(token, errors.expected, '[', token.value);
+    if (false === string) {
+      raise(token, errors.expected, '[', token.value);
+      return {
+          type: Unexpected
+        , value: ""
+        , line: line
+        , lineStart: lineStart
+        , range: [tokenStart, index]
+      };
+    }
 
     return {
         type: StringLiteral
@@ -1022,7 +1032,9 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
     // Calculate the depth of the comment.
     while ('=' === input.charAt(index + level)) level++;
     // Exit, this is not a long string afterall.
-    if ('[' !== input.charAt(index + level)) return false;
+    if ('[' !== input.charAt(index + level)) {
+      return false;
+    }
 
     index += level + 1;
 
