@@ -22,16 +22,18 @@ let errorStrings = {
 };
 
 export class LuaToken {
-  constructor(type: LuaTokenType, value: string, line: number, lineStart: number, rangeStart: number, rangeEnd: number) {
+  constructor(type: LuaTokenType, value: string|number, rawValue: string, line: number, lineStart: number, rangeStart: number, rangeEnd: number) {
     this.type = type;
     this.value = value;
+    this.rawValue = rawValue;
     this.line = line;
     this.lineStart = lineStart;
     this.rangeStart = rangeStart;
     this.rangeEnd = rangeEnd;
   }
   type: LuaTokenType;
-  value: string;
+  value: string|number;
+  rawValue: string;
   line: number;
   lineStart: number;
   rangeStart: number;
@@ -42,6 +44,7 @@ export interface LuaSyntaxError {
   message: string;
   line: number;
   column: number;
+  endLine: number;
   endColumn: number;
 }
 
@@ -60,6 +63,28 @@ export function LuaLexer(inputSource: string): LuaLexer {
   let lineStart = 0;
   let length = input.length;
   let errors = new Array<LuaSyntaxError>();
+  let tabChars = 2;
+
+  function countColumnsInRange(rangeStart: number, rangeEnd: number)
+  {
+    // columns are one-based
+    let columns = 1;
+    if (rangeEnd > input.length) {
+      rangeEnd = input.length;
+    }
+    for (let i = rangeStart; i < rangeEnd; i++) {
+      let charCode = input.charCodeAt(i);
+      if (isLineTerminator(charCode)) {
+        continue;
+      }
+      if (charCode === 9) {
+        columns += tabChars;
+        continue;
+      }
+      columns++;
+    }
+    return columns;
+  }
 
   function raiseError(token: LuaToken|undefined, errorFormat: string, ...args: string[]) {
     let message = sprintf(errorFormat, ...args);
@@ -67,14 +92,17 @@ export function LuaLexer(inputSource: string): LuaLexer {
       message: sprintf(errorFormat, ...args),
       line: line,
       column: 0,
+      endLine: 0,
       endColumn: 0,
     };
     if (token) {
-      error.column = token.rangeStart - token.lineStart;
-      error.endColumn = token.rangeEnd - token.lineStart;
+      error.column = countColumnsInRange(token.lineStart, token.rangeStart);
+      error.endLine = line;
+      error.endColumn = countColumnsInRange(lineStart, token.rangeEnd);
     } else {
-      error.column = index - lineStart;
-      error.endColumn = 10000;
+      error.column = countColumnsInRange(lineStart, index);
+      error.endLine = line;
+      error.endColumn = countColumnsInRange(lineStart, index);
     }
     errors.push(error);
   }
@@ -240,7 +268,8 @@ export function LuaLexer(inputSource: string): LuaLexer {
       }
       content = input.slice(commentStart, index);
     }
-    return new LuaToken(LuaTokenType.Comment, content, lineComment, lineStart, tokenStart, index);    
+    let rawValue = input.slice(tokenStart, index);
+    return new LuaToken(LuaTokenType.Comment, content, rawValue, lineComment, lineStart, tokenStart, index);    
   }
 
   function getNextToken(): LuaToken {
@@ -259,7 +288,7 @@ export function LuaLexer(inputSource: string): LuaLexer {
 
 
     if (index >= length) {
-      return new LuaToken(LuaTokenType.EOF, '<eof>', line, lineStart, index, index);
+      return new LuaToken(LuaTokenType.EOF, '<eof>', '<eof>', line, lineStart, index, index);
     }
 
     let tokenStart = index;
@@ -280,72 +309,76 @@ export function LuaLexer(inputSource: string): LuaLexer {
       } else {
         type = LuaTokenType.Identifier;
       }
-      return new LuaToken(type, value, line, lineStart, tokenStart, index);
-    }
-    function readHexLiteral() {
-      var fraction = 0 // defaults to 0 as it gets summed
-        , binaryExponent = 1 // defaults to 1 as it gets multiplied
-        , binarySign = 1 // positive
-        , digit, fractionStart, exponentStart, digitStart;
-  
-      digitStart = index += 2; // Skip 0x part
-  
-      // A minimum of one hex digit is required.
-      if (!isHexDigit(input.charCodeAt(index))) {
-        raiseError(undefined, errorStrings.malformedNumber, input.slice(tokenStart, index));
-      }
-      while (isHexDigit(input.charCodeAt(index))) {
-        index++;
-      }
-      return input.slice(tokenStart, index);
+      return new LuaToken(type, value, value, line, lineStart, tokenStart, index);
     }
 
-    function readDecLiteral() {
-      while (isDecDigit(input.charCodeAt(index))) {
-        index++;
+    function checkCharAndGoToNext(chars: string) {
+      let char = input.charAt(index);
+      if (char.length === 0) {
+        return false;
       }
-      // Fraction part is optional
-      if ('.' === input.charAt(index)) {
+      if (chars.indexOf(char) >= 0) {
         index++;
-        // Fraction part defaults to 0
-        while (isDecDigit(input.charCodeAt(index))) {
-          index++;
-        }
+        return true;
       }
-      // Exponent part is optional.
-      if (isCharOneOf(input.charAt(index), 'e', 'E')) {
-        index++;
-        // Sign part is optional.
-        if (isCharOneOf(input.charAt(index), '+', '-')) {
-          index++;
-        }
-        // An exponent is required to contain at least one decimal digit.
-        if (!isDecDigit(input.charCodeAt(index))) {
-          raiseError(undefined, errorStrings.malformedNumber, input.slice(tokenStart, index));
-        }
-  
-        while (isDecDigit(input.charCodeAt(index))) {
-          index++;
-        }
-      }
-      return input.slice(tokenStart, index);
+      return false;
     }
 
     function scanNumericLiteral() {
-      let character = input.charAt(index);
-      let next = input.charAt(index + 1);
+      while (true) {
+        index++;
+        let charCode = input.charCodeAt(index);
+        // go through all decimal digits and dots (46)
+        if (!isDecDigit(charCode) && charCode !== 46) {
+          break;
+        }
+      }
+      // exponent is allowed to be followed by -+
+      if (checkCharAndGoToNext("eE")) {
+        checkCharAndGoToNext("-+");
+      }
 
-      var value = ('0' === character && (next && (next === 'x' || next === 'X'))) ? readHexLiteral() : readDecLiteral();
-      return new LuaToken(LuaTokenType.NumericLiteral, value, line, lineStart, tokenStart, index);
+      // as we cannot rely on Number() to convert string with underscores
+      // we must detect whether there were any underscores at invalid locations (at start, end and next to something that is not a digit)
+      let underscoreInInvalidPlace = false;
+      let hasUnderscore = false;
+      while (true) {
+        let charCode = input.charCodeAt(index);
+        // go through all alphanumeric characters and underscores
+        if (!isAlphaNum(charCode)) {
+          if (charCode !== 95) {
+            break;
+          } else {
+            hasUnderscore = true;
+            if (!isDecDigit(input.charCodeAt(index - 1)) || !isDecDigit(input.charCodeAt(index + 1))) {
+              underscoreInInvalidPlace = true;
+            }
+          }
+
+        }
+        index++;
+      }
+      let rawValue = input.slice(tokenStart, index);
+      let valueWithoutUnderscores = rawValue;
+      if (hasUnderscore && !underscoreInInvalidPlace) {
+        valueWithoutUnderscores = valueWithoutUnderscores.replace(/_/g, "");
+      }
+      let value = Number(valueWithoutUnderscores);
+      if (Number.isNaN(value)) {
+        let token = new LuaToken(LuaTokenType.Unexpected, rawValue, rawValue, line, lineStart, tokenStart, index);
+        raiseError(token, errorStrings.malformedNumber, rawValue);
+        return token;
+      }
+      return new LuaToken(LuaTokenType.NumericLiteral, value, rawValue, line, lineStart, tokenStart, index);
     }
     function scanVarargLiteral() {
-      return new LuaToken(LuaTokenType.EOF, '<eof>', line, lineStart, index, index);
+      index += 3;
+      return new LuaToken(LuaTokenType.VarargLiteral, '...', '...', line, lineStart, tokenStart, index);
     }
     function scanPunctuator(value: string) {
       index += value.length;
-      return new LuaToken(LuaTokenType.EOF, '<eof>', line, lineStart, tokenStart, index);
+      return new LuaToken(LuaTokenType.Punctuator, value, value, line, lineStart, tokenStart, index);
     }
-
 
     // Find the string literal by matching the delimiter marks used.
     function scanStringLiteral() {
@@ -367,13 +400,14 @@ export function LuaLexer(inputSource: string): LuaLexer {
         // ending delimiter by now, raise an exception.
         else if (index >= length || isLineTerminator(charCode)) {
           string += input.slice(stringStart, index - 1);
-          raiseError(undefined, errorStrings.unfinishedString, string + String.fromCharCode(charCode));
-          break;
+          let token = new LuaToken(LuaTokenType.StringLiteral, string, string, line, lineStart, tokenStart, index);
+          raiseError(token, errorStrings.unfinishedString, string);
+          return token;
         }
       }
       string += input.slice(stringStart, index - 1);
 
-      return new LuaToken(LuaTokenType.StringLiteral, string, line, lineStart, tokenStart, index);
+      return new LuaToken(LuaTokenType.StringLiteral, string, string, line, lineStart, tokenStart, index);
     }
 
     // Expect a multiline string literal and return it as a regular string
@@ -384,10 +418,11 @@ export function LuaLexer(inputSource: string): LuaLexer {
       var string = readLongString();
       // Fail if it's not a multiline literal.
       if (!string) {
-        raiseError(undefined, errorStrings.expected, '[', '');
-        return new LuaToken(LuaTokenType.Unexpected, '[[', line, lineStart, tokenStart, index);
+        let token = new LuaToken(LuaTokenType.Unexpected, '[[', '[[', line, lineStart, tokenStart, index);
+        raiseError(token, errorStrings.expected, '[', '');
+        return token;
       }
-      return new LuaToken(LuaTokenType.StringLiteral, string, line, lineStart, tokenStart, index);
+      return new LuaToken(LuaTokenType.StringLiteral, string, string, line, lineStart, tokenStart, index);
     }
 
 
@@ -486,7 +521,7 @@ export function LuaLexer(inputSource: string): LuaLexer {
         return scanPunctuator(input.charAt(index));
     }
     let value = input.charAt(index++);
-    return new LuaToken(LuaTokenType.Unexpected, value, line, lineStart, tokenStart, index);
+    return new LuaToken(LuaTokenType.Unexpected, value, value, line, lineStart, tokenStart, index);
   }
 
   function reset() {
@@ -502,8 +537,14 @@ function isIdentifierStart(charCode: number): boolean {
   return (charCode >= 65 && charCode <= 90) || (charCode >= 97 && charCode <= 122) || 95 === charCode;
 }
 
+function isAlpha(charCode: number)
+{
+  return (charCode >= 65 && charCode <= 90) || (charCode >= 97 && charCode <= 122);
+}
+
 function isIdentifierPart(charCode: number): boolean {
-  return (charCode >= 65 && charCode <= 90) || (charCode >= 97 && charCode <= 122) || 95 === charCode || (charCode >= 48 && charCode <= 57);
+  // alpha or underscore or digit
+  return isAlpha(charCode) || charCode === 95 || isDecDigit(charCode);
 }
 
 function isKeyword(id: string) {
@@ -534,6 +575,10 @@ function isLineTerminator(charCode: number) {
 
 function isDecDigit(charCode: number) {
   return charCode >= 48 && charCode <= 57;
+}
+
+function isAlphaNum(charCode: number) {
+  return isDecDigit(charCode) || isAlpha(charCode);
 }
 
 function isHexDigit(charCode: number) {
