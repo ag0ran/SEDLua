@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import {LuaSyntaxError, LuaLexer, LuaTokenType} from "../../luaLexer";
+import {LuaSyntaxError, LuaLexer, LuaTokenType, LuaToken} from "../../luaLexer";
 import fs = require('fs');
 import { softPathToUri } from '../../sefilesystem';
 
@@ -26,12 +26,46 @@ function expectError(errror: LuaSyntaxError, expected: ExpectedError)
   assert(expected.endColumn === undefined || errror.endColumn === expected.endColumn);
 }
 
+function findTokenAfterIdentifierAssignment(tokens: Array<LuaToken>, identifier: string)
+{
+  let validLength = tokens.length - 2;
+  for (let i = 0; i < validLength; i++) {
+    let token = tokens[i];
+    if (token.type === LuaTokenType.Identifier && token.value === identifier) {
+      let nextToken = tokens[i + 1];
+      if (nextToken.type !== LuaTokenType.Punctuator || nextToken.value !== '=') {
+        continue;
+      }
+      return tokens[i + 2];
+    }
+  }
+  return undefined;
+}
+
+function testNumericLiteralTokenValue(tokens: Array<LuaToken>, identifier: string, value: number)
+{
+  let token = findTokenAfterIdentifierAssignment(tokens, identifier);
+  assert(token);
+  token = token!;
+  assert(token.type === LuaTokenType.NumericLiteral);
+  assert(token.value === value);
+}
+
+function testStringLiteralTokenValue(tokens: Array<LuaToken>, identifier: string, value: string)
+{
+  let token = findTokenAfterIdentifierAssignment(tokens, identifier);
+  assert(token);
+  token = token!;
+  assert(token.type === LuaTokenType.StringLiteral);
+  assert(token.value === value);
+}
+
 function testLexerErrors()
 {
-  test('Error reporting', function() {
+  test('Error reporting and recovery', function() {
     let testFileString = readTestFile("Content/LuaLexer_Errors_00.lua");
     let luaLexer = LuaLexer(testFileString);
-    let tokens = [];
+    let tokens = new Array<LuaToken>();
     while (true) {
       let token = luaLexer.getNextToken();
       tokens.push(token);
@@ -54,6 +88,16 @@ function testLexerErrors()
       endColumn: 19, message: "malformed number near '122_000_'"});
     expectError(luaLexer.errors[6], {line: 23, column: 8,
       endColumn: 19, message: "unfinished string near 'Bad string'"});
+
+    // let's check that valid tokens have valid value
+    testNumericLiteralTokenValue(tokens, "good_a", 123);
+    testNumericLiteralTokenValue(tokens, "good_b", 12e12);
+    testNumericLiteralTokenValue(tokens, "good_c", 0xfa12af);
+    testNumericLiteralTokenValue(tokens, "good_d", 122.22);
+    testNumericLiteralTokenValue(tokens, "good_e", 122.2222);
+    testNumericLiteralTokenValue(tokens, "good_f", 122000000);
+
+    testStringLiteralTokenValue(tokens, "goodString", "Good string");
   });
 }
 
