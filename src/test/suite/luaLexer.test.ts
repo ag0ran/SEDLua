@@ -36,19 +36,25 @@ function testStringLiteralTokenValue(tokens: Array<LuaToken>, identifier: string
   assert(token.value === value);
 }
 
+function getAllTokens(luaLexer: LuaLexer) {
+  let tokens = new Array<LuaToken>();
+  while (true) {
+    let token = luaLexer.getNextToken();
+    tokens.push(token);
+    if (token.type === LuaTokenType.EOF) {
+      break;
+    }
+  }
+  return tokens;
+}
+
 function testLexerErrors()
 {
   test('Error reporting and recovery', function() {
     let testFileString = readTestFile("Content/LuaLexer_Errors_00.lua");
     let luaLexer = LuaLexer(testFileString);
-    let tokens = new Array<LuaToken>();
-    while (true) {
-      let token = luaLexer.getNextToken();
-      tokens.push(token);
-      if (token.type === LuaTokenType.EOF) {
-        break;
-      }
-    }
+    let tokens = getAllTokens(luaLexer);
+
     assert(luaLexer.errors.length === 7);
     expectError(luaLexer.errors[0], {line: 1, column: 11,
       endColumn: 18, message: "malformed number near '123fg12'"});
@@ -77,6 +83,21 @@ function testLexerErrors()
   });
 }
 
+function testLexerStrings()
+{
+  test('lexing strings', function() {
+    let testFileString = readTestFile("Content/Strings.lua");
+    let luaLexer = LuaLexer(testFileString);
+    let tokens = getAllTokens(luaLexer);
+
+    assert(tokens.length === 4);
+    assert(luaLexer.errors.length === 0);
+    // let's check that valid tokens have valid value
+    testStringLiteralTokenValue(tokens, "emptyMultilineString", "");
+  });
+}
+
 suite('luaLexer', () => {
   testLexerErrors();
+  testLexerStrings();
 });

@@ -281,7 +281,7 @@ export function LuaLexer(inputSource: string): LuaLexer {
     if ('[' === character) {
       let longString = readLongString();
       // This wasn't a multiline comment after all.
-      if (!longString) {
+      if (longString === undefined) {
         content = character;
       } else {
         content = longString;
@@ -447,7 +447,7 @@ export function LuaLexer(inputSource: string): LuaLexer {
     function scanLongStringLiteral() {
       var string = readLongString();
       // Fail if it's not a multiline literal.
-      if (!string) {
+      if (string === undefined) {
         let token = CreateToken(LuaTokenType.Unexpected, '[[', '[[', line, lineStart, tokenStart, index);
         raiseError(token, errorStrings.expected, '[', '');
         return token;
