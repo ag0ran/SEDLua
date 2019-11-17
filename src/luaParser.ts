@@ -15,10 +15,15 @@ export class ParseNodeLocation {
     this.endCol = -1;
     this.rangeEnd = -1;
   }
-  finish(endToken: LuaToken) {
-    this.endLine = endToken.endLine;
-    this.endCol = endToken.endCol;
-    this.rangeEnd = endToken.rangeEnd;
+  finish(endToken: LuaToken|undefined) {
+    if (endToken) {
+      this.endLine = endToken.endLine;
+      this.endCol = endToken.endCol;
+      this.rangeEnd = endToken.rangeEnd;
+    } else {
+      this.endLine = this.startLine;
+      this.endCol = this.startCol;
+    }
   }
   startLine: number = -1;
   startCol: number = -1;
