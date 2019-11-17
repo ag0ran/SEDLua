@@ -35,8 +35,8 @@ function testParserSuccess() {
 }
 
 function extensiveParserTests() {
-  // disable extensive tests here
-  if (true) {
+  // run only if enabled in the environment
+  if (process.env.runExtensiveTests !== "1") {
     return;
   }
   let scriptsRoot = 'd:\\work\\main\\Content';
