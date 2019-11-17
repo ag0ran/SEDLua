@@ -19,6 +19,7 @@ export let errorStrings = {
   unfinishedString: 'unfinished string near \'%1\'',
   malformedNumber: 'malformed number near \'%1\'', 
   invalidVar: 'invalid left-hand side of assignment near \'%1\'',
+  missingLocation: 'Unable to find location near \'%1\'',
 };
 
 export class LuaToken {
@@ -103,18 +104,19 @@ export function LuaLexer(inputSource: string): LuaLexer {
     let message = sprintf(errorFormat, ...args);
     let error = {
       message: sprintf(errorFormat, ...args),
-      line: line,
+      line: 0,
       column: 0,
       endLine: 0,
       endColumn: 0,
     };
     if (token) {
+      error.line = token.startLine;
       error.column = token.startCol;
       error.endLine = token.endLine;
       error.endColumn = token.endCol;
     } else {
       error.column = countColumnsInRange(lineStart, index);
-      error.endLine = line;
+      error.endLine = error.line = line;
       error.endColumn = error.column;
     }
     errors.push(error);
