@@ -1,0 +1,4 @@
+emptyMultilineString = [===[
+]===]
+emptySingleLineString = ''
+emptySingleLineString1 = ""

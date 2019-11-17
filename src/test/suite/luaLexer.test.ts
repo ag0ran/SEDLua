@@ -90,10 +90,11 @@ function testLexerStrings()
     let luaLexer = LuaLexer(testFileString);
     let tokens = getAllTokens(luaLexer);
 
-    assert(tokens.length === 4);
     assert(luaLexer.errors.length === 0);
     // let's check that valid tokens have valid value
     testStringLiteralTokenValue(tokens, "emptyMultilineString", "");
+    testStringLiteralTokenValue(tokens, "emptySingleLineString", "");
+    testStringLiteralTokenValue(tokens, "emptySingleLineString1", "");
   });
 }
 
