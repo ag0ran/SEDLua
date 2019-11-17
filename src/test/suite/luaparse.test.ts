@@ -3,6 +3,8 @@ let luaparse = require('../../luaparse');
 import * as vscode from 'vscode';
 import fs = require('fs');
 import { softPathToUri } from '../../sefilesystem';
+import {readTestFile} from './luaParserTesting';
+
 
 function replaceOutWithSrc(inPath: string)
 {
@@ -17,13 +19,6 @@ function replaceOutWithSrc(inPath: string)
   }
 
   return inPath.substring(0, outPathStart) + slashSymbol + "src" + slashSymbol + inPath.substring(outPathStart + 5) + slashSymbol;
-}
-
-let baseTestPath = replaceOutWithSrc(__dirname);
-
-function readTestFile(filePath: string): string {
-  let fileUri = softPathToUri(filePath);
-  return fs.readFileSync(fileUri.fsPath, "utf8");
 }
 
 function expectParseError(parse_error: any, expectedLine: number, expectedCol: number, message?: string)
