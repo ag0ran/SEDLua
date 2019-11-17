@@ -12,7 +12,7 @@ export enum LuaTokenType {
   Comment,
 }
 
-let errorStrings = {
+export let errorStrings = {
   unexpected: 'unexpected %1 \'%2\' near \'%3\'',
   expected: '\'%1\' expected near \'%2\'',
   expectedToken: '%1 expected near \'%2\'', 
@@ -22,22 +22,35 @@ let errorStrings = {
 };
 
 export class LuaToken {
-  constructor(type: LuaTokenType, value: string|number, rawValue: string, line: number, lineStart: number, rangeStart: number, rangeEnd: number) {
+  constructor(type: LuaTokenType, value: string|number, rawValue: string) {
     this.type = type;
     this.value = value;
     this.rawValue = rawValue;
-    this.line = line;
-    this.lineStart = lineStart;
-    this.rangeStart = rangeStart;
-    this.rangeEnd = rangeEnd;
   }
-  type: LuaTokenType;
-  value: string|number;
-  rawValue: string;
-  line: number;
-  lineStart: number;
-  rangeStart: number;
-  rangeEnd: number;
+  type: LuaTokenType = LuaTokenType.Unexpected;
+  value: string|number = '';
+  rawValue: string = '';
+  startLine: number = 0;
+  startCol: number = 0;
+  endLine: number = 0;
+  endCol: number = 0;
+  rangeStart: number = 0;
+  rangeEnd: number = 0;
+
+  // Checks whether token is a keyword with and optional value.
+  isKeyword(rawValue?: string): boolean {
+    return this.isOfTypeWithValue(LuaTokenType.Keyword, rawValue);
+  }
+  // Checks whether token is a punctuator with and optional value.
+  isPunctuator(rawValue?: string): boolean {
+    return this.isOfTypeWithValue(LuaTokenType.Punctuator, rawValue);
+  }
+  private isOfTypeWithValue(type: LuaTokenType, rawValue?: string) {
+    if (this.type !== type) {
+      return false;
+    }
+    return !rawValue ? true : this.rawValue === rawValue;
+  }
 }
 
 export interface LuaSyntaxError {
@@ -96,15 +109,30 @@ export function LuaLexer(inputSource: string): LuaLexer {
       endColumn: 0,
     };
     if (token) {
-      error.column = countColumnsInRange(token.lineStart, token.rangeStart);
-      error.endLine = line;
-      error.endColumn = countColumnsInRange(lineStart, token.rangeEnd);
+      error.column = token.startCol;
+      error.endLine = token.endLine;
+      error.endColumn = token.endCol;
     } else {
       error.column = countColumnsInRange(lineStart, index);
       error.endLine = line;
-      error.endColumn = countColumnsInRange(lineStart, index);
+      error.endColumn = error.column;
     }
     errors.push(error);
+  }
+
+  function CreateToken(type: LuaTokenType, value: string|number, rawValue: string,
+      startLine: number, tokenLineStart: number, rangeStart: number, rangeEnd: number) : LuaToken {
+    let token = new LuaToken(type, value, rawValue);
+    token.startLine = startLine;
+    // start column is the number of columns from the start line range at token start until the token range start
+    token.startCol = countColumnsInRange(tokenLineStart, rangeStart);
+    token.endLine = line;
+    // end column is the number of columns from the current line start range until the token range end
+    token.endCol = countColumnsInRange(lineStart, rangeEnd);
+
+    token.rangeStart = rangeStart;
+    token.rangeEnd = rangeEnd;
+    return token;
   }
 
   // Whitespace has no semantic meaning in lua so simply skip ahead while
@@ -269,7 +297,7 @@ export function LuaLexer(inputSource: string): LuaLexer {
       content = input.slice(commentStart, index);
     }
     let rawValue = input.slice(tokenStart, index);
-    return new LuaToken(LuaTokenType.Comment, content, rawValue, lineComment, lineStart, tokenStart, index);    
+    return CreateToken(LuaTokenType.Comment, content, rawValue, lineComment, lineStart, tokenStart, index);    
   }
 
   function getNextToken(): LuaToken {
@@ -288,7 +316,7 @@ export function LuaLexer(inputSource: string): LuaLexer {
 
 
     if (index >= length) {
-      return new LuaToken(LuaTokenType.EOF, '<eof>', '<eof>', line, lineStart, index, index);
+      return CreateToken(LuaTokenType.EOF, '<eof>', '<eof>', line, lineStart, index, index);
     }
 
     let tokenStart = index;
@@ -309,7 +337,7 @@ export function LuaLexer(inputSource: string): LuaLexer {
       } else {
         type = LuaTokenType.Identifier;
       }
-      return new LuaToken(type, value, value, line, lineStart, tokenStart, index);
+      return CreateToken(type, value, value, line, lineStart, tokenStart, index);
     }
 
     function checkCharAndGoToNext(chars: string) {
@@ -365,19 +393,19 @@ export function LuaLexer(inputSource: string): LuaLexer {
       }
       let value = Number(valueWithoutUnderscores);
       if (Number.isNaN(value)) {
-        let token = new LuaToken(LuaTokenType.Unexpected, rawValue, rawValue, line, lineStart, tokenStart, index);
+        let token = CreateToken(LuaTokenType.Unexpected, rawValue, rawValue, line, lineStart, tokenStart, index);
         raiseError(token, errorStrings.malformedNumber, rawValue);
         return token;
       }
-      return new LuaToken(LuaTokenType.NumericLiteral, value, rawValue, line, lineStart, tokenStart, index);
+      return CreateToken(LuaTokenType.NumericLiteral, value, rawValue, line, lineStart, tokenStart, index);
     }
     function scanVarargLiteral() {
       index += 3;
-      return new LuaToken(LuaTokenType.VarargLiteral, '...', '...', line, lineStart, tokenStart, index);
+      return CreateToken(LuaTokenType.VarargLiteral, '...', '...', line, lineStart, tokenStart, index);
     }
     function scanPunctuator(value: string) {
       index += value.length;
-      return new LuaToken(LuaTokenType.Punctuator, value, value, line, lineStart, tokenStart, index);
+      return CreateToken(LuaTokenType.Punctuator, value, value, line, lineStart, tokenStart, index);
     }
 
     // Find the string literal by matching the delimiter marks used.
@@ -400,14 +428,14 @@ export function LuaLexer(inputSource: string): LuaLexer {
         // ending delimiter by now, raise an exception.
         else if (index >= length || isLineTerminator(charCode)) {
           string += input.slice(stringStart, index - 1);
-          let token = new LuaToken(LuaTokenType.StringLiteral, string, string, line, lineStart, tokenStart, index);
+          let token = CreateToken(LuaTokenType.StringLiteral, string, string, line, lineStart, tokenStart, index);
           raiseError(token, errorStrings.unfinishedString, string);
           return token;
         }
       }
       string += input.slice(stringStart, index - 1);
 
-      return new LuaToken(LuaTokenType.StringLiteral, string, string, line, lineStart, tokenStart, index);
+      return CreateToken(LuaTokenType.StringLiteral, string, string, line, lineStart, tokenStart, index);
     }
 
     // Expect a multiline string literal and return it as a regular string
@@ -418,11 +446,11 @@ export function LuaLexer(inputSource: string): LuaLexer {
       var string = readLongString();
       // Fail if it's not a multiline literal.
       if (!string) {
-        let token = new LuaToken(LuaTokenType.Unexpected, '[[', '[[', line, lineStart, tokenStart, index);
+        let token = CreateToken(LuaTokenType.Unexpected, '[[', '[[', line, lineStart, tokenStart, index);
         raiseError(token, errorStrings.expected, '[', '');
         return token;
       }
-      return new LuaToken(LuaTokenType.StringLiteral, string, string, line, lineStart, tokenStart, index);
+      return CreateToken(LuaTokenType.StringLiteral, string, string, line, lineStart, tokenStart, index);
     }
 
 
@@ -521,7 +549,7 @@ export function LuaLexer(inputSource: string): LuaLexer {
         return scanPunctuator(input.charAt(index));
     }
     let value = input.charAt(index++);
-    return new LuaToken(LuaTokenType.Unexpected, value, value, line, lineStart, tokenStart, index);
+    return CreateToken(LuaTokenType.Unexpected, value, value, line, lineStart, tokenStart, index);
   }
 
   function reset() {
