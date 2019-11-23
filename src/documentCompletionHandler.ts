@@ -1,6 +1,7 @@
-let luaparse = require('./luaparse');
+import { LuaToken, LuaTokenType } from './luaLexer';
+import { parseLuaSource, LuaParseResults, ParseNode, Comment, MemberExpression, Identifier, ParseNodeVisitResult, visitParseNodes, CallExpression, FunctionDeclaration } from './luaParser';
 import * as vscode from 'vscode';
-import { helpCompletionInfo, MacroFuncCompletionInfo, CvarFunctionCompletionInfo, MacroClassCompletionInfo, HelpCompletionInfo } from './seHelp';
+import { helpCompletionInfo, MacroFuncCompletionInfo, CvarFunctionCompletionInfo, MacroClassCompletionInfo } from './seHelp';
 import {worldScriptsStorage} from './worldScripts';
 import * as seFilesystem from './sefilesystem';
 
@@ -12,59 +13,32 @@ export class VariableInfo {
   type: string|undefined;
 }
 
-let luaparseTokenToStringMap : Map<number, string>|undefined;
-function luaparseTokenTypeToString(luaparseTokenType: number): string {
-  if (!luaparseTokenToStringMap) {
-    luaparseTokenToStringMap = new Map<number, string>();
-    let commentFound = false;
-    for (let tokenString in luaparse.tokenTypes) {
-      if (tokenString === "Comment") {
-        commentFound = true;
-      }
-      luaparseTokenToStringMap.set(luaparse.tokenTypes[tokenString], tokenString);
-    }
-    if (!commentFound) {
-      luaparseTokenToStringMap.set(-1, "Comment");
-    }
-  }
-  return luaparseTokenToStringMap.get(luaparseTokenType) || "";
-}
-
-export class TokenInfo {
-  constructor(luaparseToken?: any) {
-    if (luaparseToken) {
-      this.type = luaparseTokenTypeToString(luaparseToken.type);
-      this.value = luaparseToken.value;
-    }
-  }
-  static fromLuaparseToken(luaparseToken: any) {
-    if (luaparseToken) {
-      return new TokenInfo(luaparseToken);
-    }
-    return undefined;
-  }
-  type: string = "";
-  value: string = "";
-}
-
 export class ParseInfo {
-  token2Before: TokenInfo|undefined;
-  token1Before: TokenInfo|undefined;
-  token0: TokenInfo|undefined;
+  token2Before: LuaToken|undefined;
+  token1Before: LuaToken|undefined;
+  token0: LuaToken|undefined;
 }
 
 export class DocumentCompletionInfo {
   constructor (documentSofPath?: string) {
     this.documentSoftPath = documentSofPath || "";
   }
+  parseResults?: LuaParseResults;
+
   variables: Map<string, VariableInfo> = new Map<string, VariableInfo>();
   functions: Set<string> = new Set<string>();
-  ast: any;
-  tokens: any[] = [];
+  tokens: Array<LuaToken> = [];
   error: DocumentParsingError|undefined;
   errors: Array<DocumentParsingError>|undefined;
   warnings: Array<DocumentParsingError>|undefined;
   documentSoftPath: string;
+
+  getVariableInfoForToken(token: LuaToken): VariableInfo|undefined {
+    if (token.type !== LuaTokenType.Identifier) {
+      return undefined;
+    }
+    return this.getVariableInfo(token.rawValue);
+  }
 
   getVariableInfo(variableName: string): VariableInfo|undefined {
     let variableInfo = this.variables.get(variableName);
@@ -89,17 +63,17 @@ export class DocumentCompletionInfo {
   getTokenIndexAtOffset(offset: number) : number {
     for (let i = 0; i < this.tokens.length; i++) {
       let token = this.tokens[i];
-      if (token.range[0] <= offset && offset <= token.range[1]) {
+      if (token.rangeStart <= offset && offset <= token.rangeEnd) {
         return i;
       }
-      if (token.range[1] >= offset) {
+      if (token.rangeEnd >= offset) {
         return i - 1;
       }
     }
     return this.tokens.length - 1;
   }
-  getTokenByIndex(tokenIndex: number) : TokenInfo {
-    return new TokenInfo(this.tokens[tokenIndex]);
+  getTokenByIndex(tokenIndex: number) : LuaToken {
+    return this.tokens[tokenIndex];
   }
 
   getParseInfoAroundOffset(offset: number) : ParseInfo|undefined {
@@ -108,19 +82,19 @@ export class DocumentCompletionInfo {
     let token0 : any;
     for (let i = 0; i < this.tokens.length; i++) {
       let token = this.tokens[i];
-      if (token.range[0] <= offset && offset <= token.range[1]) {
+      if (token.rangeStart <= offset && offset <= token.rangeEnd) {
         token0 = token;
         break;
-      } else if (token.range[1] <= offset) {
+      } else if (token.rangeEnd <= offset) {
         token2Before = token1Before;
         token1Before = token;
       }
     }
     if (token0 || token1Before) {
       let parseInfo = new ParseInfo();
-      parseInfo.token0 = TokenInfo.fromLuaparseToken(token0);
-      parseInfo.token1Before = TokenInfo.fromLuaparseToken(token1Before);
-      parseInfo.token2Before = TokenInfo.fromLuaparseToken(token2Before);
+      parseInfo.token0 = token0;
+      parseInfo.token1Before = token1Before;
+      parseInfo.token2Before = token2Before;
       return parseInfo;
     }
     return undefined;
@@ -139,7 +113,7 @@ export class DocumentCompletionInfo {
     // if were exactly at the closing bracket, we should move one token back
     // (otherwise that would be considered as already closed function call and no
     // signature would be given)
-    if (firstToken.value === ")" && firstToken.range[0] === offset) {
+    if (firstToken.rangeStart === offset && firstToken.isPunctuator(')')) {
       iTokenAtOffset--;
     }
 
@@ -147,7 +121,7 @@ export class DocumentCompletionInfo {
     let parameter = 0;
     let potentialCallStartFound = false;
     let iCurrentToken = iTokenAtOffset;
-    let expectingTokenTypesAndValues: [number, string[]][] = [];
+    let expectingTokenTypesAndValues: [LuaTokenType, string[]][] = [];
     function IsTokenUnexpected(token: any): boolean {
       if (expectingTokenTypesAndValues.length === 0) {
         return false;
@@ -195,10 +169,10 @@ export class DocumentCompletionInfo {
         parameter++;
         continue;
       }
-      if (currentToken.type === luaparse.tokenTypes.Identifier
-          || currentToken.type === luaparse.tokenTypes.StringLiteral
-          || currentToken.type === luaparse.tokenTypes.NumericLiteral) {
-        expectingTokenTypesAndValues = [[luaparse.tokenTypes.Punctuator, [",", "+", "-", "*", "%", "(", "{"]]];
+      if (currentToken.type === LuaTokenType.Identifier
+          || currentToken.type === LuaTokenType.StringLiteral
+          || currentToken.type === LuaTokenType.NumericLiteral) {
+        expectingTokenTypesAndValues = [[LuaTokenType.Punctuator, [",", "+", "-", "*", "%", "(", "{"]]];
       }
     }
     if (!potentialCallStartFound || iCurrentToken <= 0) {
@@ -221,56 +195,41 @@ export class DocumentCompletionInfo {
   resolveMemberExpressionAtOffset(offset: number):
   VariableInfo|MacroFuncCompletionInfo|CvarFunctionCompletionInfo|MacroClassCompletionInfo|string|undefined
   {
-    if (!this.ast) {
+    if (this.parseResults  === undefined || this.parseResults.parsedChunk === undefined) {
       return undefined;
     }
-    function IsOutsideOfRange(obj: any, offset: number) {
-      if (!obj.range || !Array.isArray(obj.range)) {
-        return false;
+    let identifierOrMemberExpression: MemberExpression|Identifier|undefined;
+    function findIdentifierOrMemberExpressionVisitor(parseNode: ParseNode): ParseNodeVisitResult {
+      if (!parseNode.loc.containsPos(offset)) {
+        return ParseNodeVisitResult.SkipNode;
       }
-      return offset < obj.range[0] || offset > obj.range[1];
-    }
-    function findIdentifierOrMemberExpressionRecursive(obj: any, offset: number): any {
-      if (IsOutsideOfRange(obj, offset)) {
-        return;
-      }
-      for (const key of Object.keys(obj)) {
-        const value = obj[key];
-        if (key === "type") {
-          if (value === "MemberExpression") {
-            if (obj.identifier && !IsOutsideOfRange(obj.identifier, offset)) {
-              return obj;
-            }
-          } else if (value === "Identifier") {
-            return obj;
+      if (parseNode.type === "MemberExpression") {
+        let memberExpression = parseNode as MemberExpression;
+        // find the subset of the member expression that is within offset
+        while (true) {
+          if (memberExpression.base === undefined || !memberExpression.base.loc.containsPos(offset)) {
+            break;
           }
-        } 
-        if (Array.isArray(value)) {
-          for (const v of value) {
-            if (v instanceof Object) {
-              let result = findIdentifierOrMemberExpressionRecursive(v, offset);
-              if (result) {
-                return result;
-              }
+          if (memberExpression.base.type === "MemberExpression") {
+            memberExpression = memberExpression.base as MemberExpression;
+          } else {
+            if (memberExpression.base.type === "Identifier") {
+              identifierOrMemberExpression = memberExpression.base as Identifier;
+              return ParseNodeVisitResult.Stop;
             }
-          }
-        } else if (value instanceof Object) {
-          let result = findIdentifierOrMemberExpressionRecursive(value, offset);
-          if (result) {
-            return result;
+            break;
           }
         }
+        identifierOrMemberExpression = memberExpression;
+        return ParseNodeVisitResult.Stop;
+      } else if (parseNode.type === "Identifier") {
+        identifierOrMemberExpression = parseNode as Identifier;
+        return ParseNodeVisitResult.Stop;
       }
-      return undefined;
+      return ParseNodeVisitResult.Continue;
     }
-    let identifierOrMemberExpression: any;
-    // find member expression at offset range
-    for (const statement of this.ast.body) {
-      identifierOrMemberExpression = findIdentifierOrMemberExpressionRecursive(statement, offset);
-      if (identifierOrMemberExpression) {
-        break;
-      }
-    }
+
+    this.parseResults.parsedChunk.visitChildren(findIdentifierOrMemberExpressionVisitor);
     let documentCompletionInfo = this;
 
     function resolveMemberExpressionRecursive(memberExpression: any):
@@ -314,7 +273,7 @@ export class DocumentCompletionInfo {
     MacroFuncCompletionInfo|CvarFunctionCompletionInfo|MacroClassCompletionInfo|string|undefined
   {
     let startingToken = this.tokens[iStartingToken];
-    if (startingToken.type !== luaparse.tokenTypes.Identifier) {
+    if (startingToken.type !== LuaTokenType.Identifier) {
       return undefined;
     }
     let tokenChain = [startingToken];
@@ -322,13 +281,13 @@ export class DocumentCompletionInfo {
     for (let iToken = iStartingToken - 1; iToken >= 0; iToken--) {
       let token = this.tokens[iToken];
       if (!lastTokenIndexing) {
-        if (isIndexingChar(token.value)) {
+        if (isMemberIndexingToken(token)) {
           lastTokenIndexing = true;
         } else {
           break;
         }
       } else {
-        if (token.type !== luaparse.tokenTypes.Identifier) {
+        if (token.type !== LuaTokenType.Identifier) {
           break;
         }
         lastTokenIndexing = false;
@@ -340,19 +299,22 @@ export class DocumentCompletionInfo {
     let lastInfo: MacroClassCompletionInfo|MacroFuncCompletionInfo|CvarFunctionCompletionInfo|string|undefined;
     let indexWhat: string|undefined;
     while (tokenChain.length > 0) {
-      let token = tokenChain.pop();
+      let token = tokenChain.pop()!;
       if (!lastInfo) {
-        let variableInfo = this.getVariableInfo(token!.value);
+        // we're interested in identifiers only for indexing (for now)
+        if (token.type !== LuaTokenType.Identifier) {
+          return undefined;
+        }
+        let variableInfo = this.getVariableInfo(token.rawValue);
         if (variableInfo && variableInfo.type) {
           lastInfo = helpCompletionInfo.findMacroClassInfo(variableInfo.type);
         }
         if (!lastInfo) {
-          lastInfo = helpCompletionInfo.findCvarFuncInfo(token!.value);
+          lastInfo = helpCompletionInfo.findCvarFuncInfo(token.rawValue);
           if (!lastInfo) {
-            lastInfo = helpCompletionInfo.findMacroFuncInfo(token!.value);
+            lastInfo = helpCompletionInfo.findMacroFuncInfo(token.rawValue);
           }
         }
-        
         if (!lastInfo) {
           return undefined;
         }
@@ -361,11 +323,11 @@ export class DocumentCompletionInfo {
           if (!(lastInfo instanceof MacroClassCompletionInfo)) {
             return undefined;
           }
-          if (token!.type !== luaparse.tokenTypes.Identifier) {
+          if (token.type !== LuaTokenType.Identifier) {
             return undefined;
           }
           if (indexWhat === "Event") {
-            let eventName = token!.value;
+            let eventName = token.rawValue;
             if (!helpCompletionInfo.findMacroClassEvent(lastInfo, eventName)) {
               return undefined;
             } else {
@@ -373,7 +335,7 @@ export class DocumentCompletionInfo {
               break;
             }
           } else if (indexWhat === "Function") {
-            let functionName = token!.value;
+            let functionName = token.rawValue;
             let funcInfo = helpCompletionInfo.findMacroClassFunction(lastInfo, functionName);
             if (!funcInfo) {
               return undefined;
@@ -384,7 +346,6 @@ export class DocumentCompletionInfo {
           } else {
             return undefined;
           }
-          indexWhat = undefined;
         } else {
           if (token!.value === ".") {
             indexWhat = "Event";
@@ -427,26 +388,17 @@ export class DocumentCompletionHandler {
   async getCompletionInfoNow(): Promise<DocumentCompletionInfo|undefined> {
     return this.currentCompletionInfo;
   }
-  getLastError(): string {
-    return this.lastError;
-  }
   async onDocumentChanged(e: vscode.TextDocumentChangeEvent) {
     await this.parseDocument(e.document.getText(), seFilesystem.uriToSoftpath(e.document.uri));
-    await this.fixAst(e.contentChanges);
   }
 
   private async parseDocument(documentText: string, documentSoftPath?: string) {
     let result = new DocumentCompletionInfo(documentSoftPath);
-    function onCreateNodeCallback(node: any) {
-      switch (node.type) {
-        case "Identifier":
-          let varName: string = node.name;
-          if (!result.variables.get(varName)) {
-            result.variables.set(varName, new VariableInfo());
-          }
-          break;
-        case "Comment":
-          let comment: string = node.value;
+    function processTokens(tokens: Array<LuaToken>)
+    {
+      for (let token of tokens) {
+        if (token.type === LuaTokenType.Comment) {
+          let comment = token.value as string;
           // we have to be careful not to match a commented out call of a member function, therefore only whitespace is allowed before the end of the comment
           let commentMatch = comment.match(/(\w+)\s*:\s*(\w+)\s*$/);
           if (commentMatch) {
@@ -458,8 +410,7 @@ export class DocumentCompletionHandler {
               if (!result.warnings) {
                 result.warnings = [];
               }
-              let loc = node.loc;
-              let errorRange = [loc.start.line - 1, loc.start.column, loc.end.line - 1, loc.end.column];
+              let errorRange = [token.startLine - 1, token.startCol - 1, token.endLine - 1, token.endCol - 1];
               let errorMessage = `unrecognized type ${varType}`;
               function rangesEqual(rangeA: number[], rangeB: number[]) {
                 return rangeA.length === 4 && rangeA.length === rangeB.length && rangeA[0] === rangeB[0]
@@ -470,15 +421,30 @@ export class DocumentCompletionHandler {
               }
             }
           }
+        }
+      }
+    }
+
+    function onCreateNodeCallback(node: ParseNode) {
+      switch (node.type) {
+        case "Identifier":
+          let identifier = node as Identifier;
+          let varName: string = identifier.name;
+          if (!result.variables.get(varName)) {
+            result.variables.set(varName, new VariableInfo());
+          }
           break;
         case "CallExpression":
+          let callExpression = node as CallExpression;
           let funcName;
 
-          if (node.base) {
-            if (node.base.identifier && node.base.identifier.name) {
-              funcName = node.base.identifier.name;
-            } else if (node.base.name) {
-              funcName = node.base.name;
+          if (callExpression.base) {
+            if (callExpression.base.type === "MemberExpression") {
+              let baseMemberExpression = callExpression.base as MemberExpression;
+              funcName = baseMemberExpression.identifier.name;
+            } else if (callExpression.base.type === "Identifier") {
+              let baseIdentifier = callExpression.base as Identifier;
+              funcName = baseIdentifier.name;
             }
           }
           if (funcName) {
@@ -486,8 +452,10 @@ export class DocumentCompletionHandler {
           }
           break;
         case "FunctionDeclaration":
-          if (node.identifier) {
-            let nodeIdentifier = node.identifier.name;
+          let funcDecl = node as FunctionDeclaration;
+          if (funcDecl.identifier && funcDecl.identifier.type === "Identifier") {
+            let funcIdentifier = funcDecl.identifier as Identifier;
+            let nodeIdentifier = funcIdentifier.name;
             result.functions.add(nodeIdentifier);
           }
           break;
@@ -502,99 +470,34 @@ export class DocumentCompletionHandler {
       onCreateNode: onCreateNodeCallback
     };
     try {
-      result.ast = luaparse.parse(documentText, parseOptions);
-      if (result.ast.parse_errors && result.ast.parse_errors.length > 0) {
+      let parseResults = parseLuaSource(documentText, onCreateNodeCallback);
+      result.parseResults = parseResults;
+      result.tokens = parseResults.tokens;
+      processTokens(result.tokens);
+
+      if (parseResults.errors !== undefined) {
         result.errors = [];
-        for (let err of result.ast.parse_errors) {
-          result.errors.push(new DocumentParsingError([err.line - 1, err.column, err.line - 1, err.column + 10000], err.message));
+        for (let err of parseResults.errors) {
+          result.errors.push(new DocumentParsingError([err.line - 1, err.column - 1, err.endLine - 1, err.endColumn - 1], err.message));
         }
-        
       }
     } catch (err) {
-      if (err.line && err.column) {
-        result.error = new DocumentParsingError([err.line - 1, err.column, err.line - 1, err.column + 10000], err.message);
+      if (result.errors === undefined) {
+        result.errors = [];
       }
-    } finally {
-      parseOptions.wait = true;
-      let manualParser = luaparse.parse(documentText, parseOptions);
-      // We will also collect comments as tokens as we're interested in them for
-      // variable hinting purposes.
-      let lastCommentsLen = 0;
-      while (true) {
-        let token = manualParser.lex();
-        if (manualParser.comments && lastCommentsLen !== manualParser.comments.length) {
-          lastCommentsLen = manualParser.comments.length;
-          let comment = manualParser.comments[lastCommentsLen - 1];
-          let commentToken = {
-            type: -1,
-            value: comment.value,
-            range: comment.range,
-          };
-          result.tokens.push(commentToken);
-        }
-        if (!token || token.type === luaparse.tokenTypes.EOF) {
-          break;
-        }
-        result.tokens.push(token);
-      }
+      result.errors.push(new DocumentParsingError([0, 0, 0, 0], `Unexpected lua parsing error: ${err.message}`));
     }
     // don't let functions be specified in variables
     for (const func of result.functions) {
       result.variables.delete(func);
     }
-    // use last good ast as the current ast
-    if (!result.ast) {
-      result.ast = this.lastAst;
-    } else {
-      this.lastAst = result.ast;
-    }
     this.currentCompletionInfo = result;
   }
-  private fixAst(contentChanges: ReadonlyArray<vscode.TextDocumentContentChangeEvent>)
-  {
-    // nothing to do if no current completion info or no last error (AST is correct when there was no error)
-    if (!this.currentCompletionInfo || !this.currentCompletionInfo.error) {
-      return;
-    }
-    let ast = this.lastAst;
-    if (!ast) {
-      return;
-    }
-    function fixRangesRecursive(obj: any, rangeOffset: number, rangeChange: number) {
-      for (const key of Object.keys(obj)) {
-        let value = obj[key];
-        if (key === "range") {
-          if (Array.isArray(value) && value.length === 2) {
-            if (rangeOffset > value[0]) {
-              if (rangeOffset <= value[1]) {
-                value[1] += rangeChange;
-              }
-            } else if (rangeOffset <= value[0]) {
-              value[0] += rangeChange;
-              value[1] += rangeChange;
-            }
-          }
-        } else if (Array.isArray(value)) {
-          for (const v of value) {
-            if (v instanceof Object) {
-              fixRangesRecursive(v, rangeOffset, rangeChange);
-            }
-          }
-        } else if (value instanceof Object) {
-          fixRangesRecursive(value, rangeOffset, rangeChange);
-        }
-      }
-    }
-
-    for (const contentChangeEvent of contentChanges) {
-      let rangeOffset = contentChangeEvent.rangeOffset;
-      let rangeChange = contentChangeEvent.text.length - contentChangeEvent.rangeLength;
-      fixRangesRecursive(ast, rangeOffset, rangeChange);
-    }
-  }
   private currentCompletionInfo: DocumentCompletionInfo|undefined = undefined;
-  private lastError: string = "";
-  private lastAst: any;
 }
 
-function isIndexingChar(char: string) {return char === '.' || char === ':';}
+export function isMemberIndexingChar(char: string) {return char === '.' || char === ':';}
+
+export function isMemberIndexingToken(token: LuaToken) {
+  return token.type === LuaTokenType.Punctuator && isMemberIndexingChar(token.rawValue);
+}

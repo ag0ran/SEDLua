@@ -1,7 +1,8 @@
 import * as assert from 'assert';
 
 import * as vscode from 'vscode';
-import {DocumentCompletionHandler, DocumentCompletionInfo, TokenInfo} from '../../documentCompletionHandler';
+import {LuaTokenType} from '../../luaLexer';
+import {DocumentCompletionHandler, DocumentCompletionInfo} from '../../documentCompletionHandler';
 import {helpCompletionInfo, HelpCompletionInfo, MacroFuncCompletionInfo, loadHelpCompletionInfo} from '../../seHelp';
 import fs = require('fs');
 import { softPathToUri, softPathToHardPath } from '../../sefilesystem';
@@ -19,7 +20,7 @@ async function testDocumentParsing() {
       {
         let tokenIndexAt_ln2_col16 = completionInfo.getTokenIndexAtOffset(textDocument.offsetAt(new vscode.Position(1, 15)));
         let tokenAt_ln2_col16 = completionInfo.getTokenByIndex(tokenIndexAt_ln2_col16);
-        assert(tokenAt_ln2_col16.type === "Identifier");
+        assert(tokenAt_ln2_col16.type === LuaTokenType.Identifier);
         assert(tokenAt_ln2_col16.value === "derivedSampleObject");
       }
 

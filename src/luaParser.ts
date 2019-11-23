@@ -25,6 +25,9 @@ export class ParseNodeLocation {
       this.endCol = this.startCol;
     }
   }
+  containsPos(pos: number) {
+    return pos >= this.rangeStart && pos <= this.rangeEnd;
+   }
   startLine: number = -1;
   startCol: number = -1;
   endLine: number = -1;
@@ -33,9 +36,43 @@ export class ParseNodeLocation {
   rangeEnd: number = -1;
 }
 
+const invalidParseNodeLoc = new ParseNodeLocation();
+
+
+// Describes parse node visitor result
+export enum ParseNodeVisitResult {
+  SkipNode,
+  Continue,
+  Stop,
+}
+
+type ParseNodeVisitorFunc =  (parseNode: ParseNode) => ParseNodeVisitResult;
+
 export interface ParseNode {
   readonly type: string;
-  loc: ParseNodeLocation|undefined;
+  loc: ParseNodeLocation;
+  
+  // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
+  visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult;
+}
+
+// Visits parse node and its children. Visitor function and this function return whether visiting should continue, stop or skip node.
+export function visitParseNodeAndChildren(node: ParseNode, parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
+  let result = parseNodeVisitor(node);
+  if (result === ParseNodeVisitResult.SkipNode) {
+    return ParseNodeVisitResult.Continue;
+  } else if (result === ParseNodeVisitResult.Stop) {
+    return ParseNodeVisitResult.Stop;
+  }
+  return node.visitChildren(parseNodeVisitor);
+}
+
+// Visits all nodes. Visitor function and this function return whether visiting should continue, stop or skip node.
+export function visitParseNodes(nodes: Array<ParseNode>, parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
+  for (let node of nodes) {
+    visitParseNodeAndChildren(node, parseNodeVisitor);
+  }
+  return ParseNodeVisitResult.Continue;
 }
 
 export interface Statement extends ParseNode {
@@ -46,7 +83,9 @@ export class BreakStatement implements Statement {
     this.type = 'BreakStatement';
   }
   type: string;
-  loc: ParseNodeLocation|undefined;
+  loc: ParseNodeLocation = invalidParseNodeLoc;
+  // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
+  visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult { return ParseNodeVisitResult.Continue;}
 }
 
 export class ReturnStatement implements Statement {
@@ -55,8 +94,13 @@ export class ReturnStatement implements Statement {
     this.args = args;
   }
   type: string;
-  loc: ParseNodeLocation|undefined;
+  loc: ParseNodeLocation = invalidParseNodeLoc;
   args: Array<ParseNode>;
+
+  // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
+  visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
+    return visitParseNodes(this.args, parseNodeVisitor);
+  }
 }
 
 export interface IfStatementClause extends ParseNode {
@@ -68,8 +112,13 @@ export class IfStatement implements Statement {
     this.clauses = clauses;
   }
   type: string;
-  loc: ParseNodeLocation|undefined;
+  loc: ParseNodeLocation = invalidParseNodeLoc;
   clauses: Array<IfStatementClause>;
+
+  // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
+  visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
+    return visitParseNodes(this.clauses, parseNodeVisitor);
+  }
 }
 
 export class IfClause implements IfStatementClause {
@@ -79,9 +128,17 @@ export class IfClause implements IfStatementClause {
     this.body = body;
   }
   type: string;
-  loc: ParseNodeLocation|undefined;
+  loc: ParseNodeLocation = invalidParseNodeLoc;
   condition: ParseNode;
   body: Array<Statement>;
+
+  // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
+  visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
+    if (visitParseNodeAndChildren(this.condition, parseNodeVisitor) === ParseNodeVisitResult.Stop) {
+      return ParseNodeVisitResult.Stop;
+    }
+    return visitParseNodes(this.body, parseNodeVisitor);
+  }
 }
 
 export class ElseifClause implements IfStatementClause {
@@ -91,9 +148,17 @@ export class ElseifClause implements IfStatementClause {
     this.body = body;
   }
   type: string;
-  loc: ParseNodeLocation|undefined;
+  loc: ParseNodeLocation = invalidParseNodeLoc;
   condition: ParseNode;
   body: Array<Statement>;
+
+  // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
+  visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
+    if (visitParseNodeAndChildren(this.condition, parseNodeVisitor) === ParseNodeVisitResult.Stop) {
+      return ParseNodeVisitResult.Stop;
+    }
+    return visitParseNodes(this.body, parseNodeVisitor);
+  }
 }
 
 export class ElseClause implements IfStatementClause {
@@ -102,8 +167,13 @@ export class ElseClause implements IfStatementClause {
     this.body = body;
   }
   type: string;
-  loc: ParseNodeLocation|undefined;
+  loc: ParseNodeLocation = invalidParseNodeLoc;
   body: Array<Statement>;
+
+  // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
+  visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
+    return visitParseNodes(this.body, parseNodeVisitor);
+  }
 }
 
 export class WhileStatement implements Statement {
@@ -113,9 +183,17 @@ export class WhileStatement implements Statement {
     this.body = body;
   }
   type: string;
-  loc: ParseNodeLocation|undefined;
+  loc: ParseNodeLocation = invalidParseNodeLoc;
   condition: ParseNode;
   body: Array<Statement>;
+
+  // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
+  visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
+    if (visitParseNodeAndChildren(this.condition, parseNodeVisitor) === ParseNodeVisitResult.Stop) {
+      return ParseNodeVisitResult.Stop;
+    }
+    return visitParseNodes(this.body, parseNodeVisitor);
+  }
 }
 
 export class DoStatement implements Statement {
@@ -124,8 +202,13 @@ export class DoStatement implements Statement {
     this.body = body;
   }
   type: string;
-  loc: ParseNodeLocation|undefined;
+  loc: ParseNodeLocation = invalidParseNodeLoc;
   body: Array<Statement>;
+
+  // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
+  visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
+    return visitParseNodes(this.body, parseNodeVisitor);
+  }
 }
 
 export class RepeatStatement implements Statement {
@@ -135,9 +218,17 @@ export class RepeatStatement implements Statement {
     this.body = body;
   }
   type: string;
-  loc: ParseNodeLocation|undefined;
+  loc: ParseNodeLocation = invalidParseNodeLoc;
   condition: ParseNode;
   body: Array<Statement>;
+
+  // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
+  visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
+    if (visitParseNodeAndChildren(this.condition, parseNodeVisitor) === ParseNodeVisitResult.Stop) {
+      return ParseNodeVisitResult.Stop;
+    }
+    return visitParseNodes(this.body, parseNodeVisitor);
+  }
 }
 
 export class LocalStatement implements Statement {
@@ -147,9 +238,21 @@ export class LocalStatement implements Statement {
     this.init = init;
   }
   type: string;
-  loc: ParseNodeLocation|undefined;
+  loc: ParseNodeLocation = invalidParseNodeLoc;
   variables: Array<ParseNode>;
   init: Array<Expression>|undefined;
+
+  // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
+  visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
+    if (visitParseNodes(this.variables, parseNodeVisitor) === ParseNodeVisitResult.Stop) {
+      return ParseNodeVisitResult.Stop;
+    }
+    if (this.init) {
+      return visitParseNodes(this.init, parseNodeVisitor);
+    } else {
+      return ParseNodeVisitResult.Continue;
+    }
+  }
 }
 
 export class AssignmentStatement implements Statement {
@@ -159,9 +262,21 @@ export class AssignmentStatement implements Statement {
     this.init = init;
   }
   type: string;
-  loc: ParseNodeLocation|undefined;
+  loc: ParseNodeLocation = invalidParseNodeLoc;
   variables: Array<Expression>;
   init: Array<Expression>;
+
+  // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
+  visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
+    if (visitParseNodes(this.variables, parseNodeVisitor) === ParseNodeVisitResult.Stop) {
+      return ParseNodeVisitResult.Stop;
+    }
+    if (this.init) {
+      return visitParseNodes(this.init, parseNodeVisitor);
+    } else {
+      return ParseNodeVisitResult.Continue;
+    }
+  }
 }
 
 export class CallStatement implements Statement {
@@ -170,8 +285,16 @@ export class CallStatement implements Statement {
     this.expression = expression;
   }
   type: string;
-  loc: ParseNodeLocation|undefined;
+  loc: ParseNodeLocation = invalidParseNodeLoc;
   expression: Expression;
+
+  // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
+  visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
+    if (visitParseNodeAndChildren(this.expression, parseNodeVisitor) === ParseNodeVisitResult.Stop) {
+      return ParseNodeVisitResult.Stop;
+    }
+    return this.expression.visitChildren(parseNodeVisitor);
+  }
 }
 
 export interface Expression extends ParseNode {
@@ -187,12 +310,23 @@ export class FunctionDeclaration implements Statement, Expression {
     this.body = body;
   }
   type: string;
-  loc: ParseNodeLocation|undefined;
+  loc: ParseNodeLocation = invalidParseNodeLoc;
   identifier: ParseNode|undefined;
   isLocal: boolean;
   parameters: Array<Identifier|VarargLiteral>;
   body: Array<Statement>;
   inParens: boolean|undefined;
+
+  // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
+  visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
+    if (this.identifier && visitParseNodeAndChildren(this.identifier, parseNodeVisitor) === ParseNodeVisitResult.Stop) {
+      return ParseNodeVisitResult.Stop;
+    }
+    if (visitParseNodes(this.parameters, parseNodeVisitor) === ParseNodeVisitResult.Stop) {
+      return ParseNodeVisitResult.Stop;
+    }
+    return visitParseNodes(this.body, parseNodeVisitor);
+  }
 }
 
 export class ForNumericStatement implements Statement {
@@ -205,12 +339,29 @@ export class ForNumericStatement implements Statement {
     this.body = body;
   }
   type: string;
-  loc: ParseNodeLocation|undefined;
+  loc: ParseNodeLocation = invalidParseNodeLoc;
   variable: Identifier;
   start: ParseNode;
   end: ParseNode;
   step: ParseNode|undefined;
   body: Array<Statement>;
+
+  // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
+  visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
+    if (visitParseNodeAndChildren(this.variable, parseNodeVisitor) === ParseNodeVisitResult.Stop) {
+      return ParseNodeVisitResult.Stop;
+    }
+    if (visitParseNodeAndChildren(this.start, parseNodeVisitor) === ParseNodeVisitResult.Stop) {
+      return ParseNodeVisitResult.Stop;
+    }
+    if (visitParseNodeAndChildren(this.end, parseNodeVisitor) === ParseNodeVisitResult.Stop) {
+      return ParseNodeVisitResult.Stop;
+    }
+    if (this.step && visitParseNodeAndChildren(this.step, parseNodeVisitor) === ParseNodeVisitResult.Stop) {
+      return ParseNodeVisitResult.Stop;
+    }
+    return visitParseNodes(this.body, parseNodeVisitor);
+  }
 }
 
 export class ForGenericStatement implements Statement {
@@ -221,10 +372,21 @@ export class ForGenericStatement implements Statement {
     this.body = body;
   }
   type: string;
-  loc: ParseNodeLocation|undefined;
+  loc: ParseNodeLocation = invalidParseNodeLoc;
   variables: Array<Identifier>;
   iterators: Array<Expression>;
   body: Array<Statement>;
+
+  // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
+  visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
+    if (visitParseNodes(this.variables, parseNodeVisitor) === ParseNodeVisitResult.Stop) {
+      return ParseNodeVisitResult.Stop;
+    }
+    if (visitParseNodes(this.iterators, parseNodeVisitor) === ParseNodeVisitResult.Stop) {
+      return ParseNodeVisitResult.Stop;
+    }
+    return visitParseNodes(this.body, parseNodeVisitor);
+  }
 }
 
 export class Chunk implements ParseNode {
@@ -233,8 +395,13 @@ export class Chunk implements ParseNode {
     this.body = body;
   }
   type: string;
-  loc: ParseNodeLocation|undefined;
+  loc: ParseNodeLocation = invalidParseNodeLoc;
   body: Array<Statement>;
+
+  // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
+  visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
+    return visitParseNodes(this.body, parseNodeVisitor);
+  }
 }
 
 export class Identifier implements Expression {
@@ -243,10 +410,13 @@ export class Identifier implements Expression {
     this.name = name;
   }
   type: string;
-  loc: ParseNodeLocation|undefined;
+  loc: ParseNodeLocation = invalidParseNodeLoc;
   name: string;
   isLocal: boolean|undefined;
   inParens: boolean|undefined;
+
+  // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
+  visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult { return ParseNodeVisitResult.Continue;}
 }
 
 export interface Literal extends Expression {
@@ -260,10 +430,13 @@ export class StringLiteral implements Literal {
     this.rawValue = rawValue;
   }
   type: string;
-  loc: ParseNodeLocation|undefined;
+  loc: ParseNodeLocation = invalidParseNodeLoc;
   value: string;
   rawValue: string;
   inParens: boolean|undefined;
+
+  // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
+  visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult { return ParseNodeVisitResult.Continue;}
 }
 
 export class NumericLiteral implements Literal {
@@ -273,10 +446,13 @@ export class NumericLiteral implements Literal {
     this.rawValue = rawValue;
   }
   type: string;
-  loc: ParseNodeLocation|undefined;
+  loc: ParseNodeLocation = invalidParseNodeLoc;
   value: number;
   rawValue: string;
   inParens: boolean|undefined;
+
+  // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
+  visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult { return ParseNodeVisitResult.Continue;}
 }
 
 export class BooleanLiteral implements Literal {
@@ -286,10 +462,13 @@ export class BooleanLiteral implements Literal {
     this.rawValue = rawValue;
   }
   type: string;
-  loc: ParseNodeLocation|undefined;
+  loc: ParseNodeLocation = invalidParseNodeLoc;
   value: boolean;
   rawValue: string;
   inParens: boolean|undefined;
+
+  // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
+  visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult { return ParseNodeVisitResult.Continue;}
 }
 
 export class NilLiteral implements Literal {
@@ -298,9 +477,12 @@ export class NilLiteral implements Literal {
     this.rawValue = 'nil';
   }
   type: string;
-  loc: ParseNodeLocation|undefined;
+  loc: ParseNodeLocation = invalidParseNodeLoc;
   rawValue: string;
   inParens: boolean|undefined;
+
+  // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
+  visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult { return ParseNodeVisitResult.Continue;}
 }
 
 export class VarargLiteral implements Literal {
@@ -309,9 +491,12 @@ export class VarargLiteral implements Literal {
     this.rawValue = '...';
   }
   type: string;
-  loc: ParseNodeLocation|undefined;
+  loc: ParseNodeLocation = invalidParseNodeLoc;
   rawValue: string;
   inParens: boolean|undefined;
+
+  // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
+  visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult { return ParseNodeVisitResult.Continue;}
 }
 
 export class TableKey implements ParseNode {
@@ -321,9 +506,17 @@ export class TableKey implements ParseNode {
     this.value = value;
   }
   type: string;
-  loc: ParseNodeLocation|undefined;
+  loc: ParseNodeLocation = invalidParseNodeLoc;
   key: ParseNode;
   value: ParseNode;
+
+  // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
+  visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
+    if (visitParseNodeAndChildren(this.key, parseNodeVisitor) === ParseNodeVisitResult.Stop) {
+      return ParseNodeVisitResult.Stop;
+    }
+    return visitParseNodeAndChildren(this.value, parseNodeVisitor);
+  }
 }
 
 export class TableKeyString implements ParseNode {
@@ -333,9 +526,14 @@ export class TableKeyString implements ParseNode {
     this.value = value;
   }
   type: string;
-  loc: ParseNodeLocation|undefined;
+  loc: ParseNodeLocation = invalidParseNodeLoc;
   key: string;
   value: Expression;
+
+  // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
+  visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
+    return visitParseNodeAndChildren(this.value, parseNodeVisitor);
+  }
 }
 
 export class TableValue implements ParseNode {
@@ -344,8 +542,13 @@ export class TableValue implements ParseNode {
     this.value = value;
   }
   type: string;
-  loc: ParseNodeLocation|undefined;
+  loc: ParseNodeLocation = invalidParseNodeLoc;
   value: Expression;
+
+  // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
+  visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
+    return visitParseNodeAndChildren(this.value, parseNodeVisitor);
+  }
 }
 
 export class TableConstructorExpression implements Expression {
@@ -354,9 +557,14 @@ export class TableConstructorExpression implements Expression {
     this.fields = fields;
   }
   type: string;
-  loc: ParseNodeLocation|undefined;
+  loc: ParseNodeLocation = invalidParseNodeLoc;
   fields: Array<ParseNode>;
   inParens: boolean|undefined;
+
+  // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
+  visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
+    return visitParseNodes(this.fields, parseNodeVisitor);
+  }
 }
 
 export class LogicalExpression implements Expression {
@@ -367,11 +575,19 @@ export class LogicalExpression implements Expression {
     this.right = right;
   }
   type: string;
-  loc: ParseNodeLocation|undefined;
+  loc: ParseNodeLocation = invalidParseNodeLoc;
   operator: string;
   left: ParseNode;
   right: ParseNode;
   inParens: boolean|undefined;
+
+  // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
+  visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
+    if (visitParseNodeAndChildren(this.left, parseNodeVisitor) === ParseNodeVisitResult.Stop) {
+      return ParseNodeVisitResult.Stop;
+    }
+    return visitParseNodeAndChildren(this.right, parseNodeVisitor);
+  }
 }
 
 export class BinaryExpression implements Expression {
@@ -382,11 +598,19 @@ export class BinaryExpression implements Expression {
     this.right = right;
   }
   type: string;
-  loc: ParseNodeLocation|undefined;
+  loc: ParseNodeLocation = invalidParseNodeLoc;
   operator: string;
   left: ParseNode;
   right: ParseNode;
   inParens: boolean|undefined;
+
+  // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
+  visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
+    if (visitParseNodeAndChildren(this.left, parseNodeVisitor) === ParseNodeVisitResult.Stop) {
+      return ParseNodeVisitResult.Stop;
+    }
+    return visitParseNodeAndChildren(this.right, parseNodeVisitor);
+  }
 }
 
 export class UnaryExpression implements Expression {
@@ -396,10 +620,15 @@ export class UnaryExpression implements Expression {
     this.argument = argument;
   }
   type: string;
-  loc: ParseNodeLocation|undefined;
+  loc: ParseNodeLocation = invalidParseNodeLoc;
   operator: string;
   argument: ParseNode;
   inParens: boolean|undefined;
+
+  // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
+  visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
+    return visitParseNodeAndChildren(this.argument, parseNodeVisitor);
+  }
 }
 
 export class MemberExpression implements Expression {
@@ -410,11 +639,19 @@ export class MemberExpression implements Expression {
     this.base = base;
   }
   type: string;
-  loc: ParseNodeLocation|undefined;
+  loc: ParseNodeLocation = invalidParseNodeLoc;
   base: ParseNode|undefined;
   indexer: string;
   identifier: Identifier;
   inParens: boolean|undefined;
+
+  // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
+  visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
+    if (this.base && visitParseNodeAndChildren(this.base, parseNodeVisitor) === ParseNodeVisitResult.Stop) {
+      return ParseNodeVisitResult.Stop;
+    }
+    return visitParseNodeAndChildren(this.identifier, parseNodeVisitor);
+  }
 }
 
 export class IndexExpression implements Expression {
@@ -424,10 +661,18 @@ export class IndexExpression implements Expression {
     this.index = index;
   }
   type: string;
-  loc: ParseNodeLocation|undefined;
+  loc: ParseNodeLocation = invalidParseNodeLoc;
   base: ParseNode|undefined;
   index: ParseNode;
   inParens: boolean|undefined;
+
+  // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
+  visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
+    if (this.base && visitParseNodeAndChildren(this.base, parseNodeVisitor) === ParseNodeVisitResult.Stop) {
+      return ParseNodeVisitResult.Stop;
+    }
+    return visitParseNodeAndChildren(this.index, parseNodeVisitor);
+  }
 }
 
 export class CallExpression implements Expression {
@@ -437,10 +682,18 @@ export class CallExpression implements Expression {
     this.args = args;
   }
   type: string;
-  loc: ParseNodeLocation|undefined;
+  loc: ParseNodeLocation = invalidParseNodeLoc;
   base: ParseNode;
   args: Array<ParseNode>;
   inParens: boolean|undefined;
+
+  // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
+  visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
+    if (visitParseNodeAndChildren(this.base, parseNodeVisitor) === ParseNodeVisitResult.Stop) {
+      return ParseNodeVisitResult.Stop;
+    }
+    return visitParseNodes(this.args, parseNodeVisitor);
+  }
 }
 
 export class TableCallExpression implements Expression {
@@ -450,10 +703,18 @@ export class TableCallExpression implements Expression {
     this.table = table;
   }
   type: string;
-  loc: ParseNodeLocation|undefined;
+  loc: ParseNodeLocation = invalidParseNodeLoc;
   base: ParseNode;
   table: TableConstructorExpression;
   inParens: boolean|undefined;
+
+  // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
+  visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
+    if (visitParseNodeAndChildren(this.base, parseNodeVisitor) === ParseNodeVisitResult.Stop) {
+      return ParseNodeVisitResult.Stop;
+    }
+    return visitParseNodeAndChildren(this.table, parseNodeVisitor);
+  }
 }
 
 export class StringCallExpression implements Expression {
@@ -463,10 +724,18 @@ export class StringCallExpression implements Expression {
     this.literal = literal;
   }
   type: string;
-  loc: ParseNodeLocation|undefined;
+  loc: ParseNodeLocation = invalidParseNodeLoc;
   base: ParseNode;
   literal: StringLiteral;
   inParens: boolean|undefined;
+
+  // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
+  visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
+    if (visitParseNodeAndChildren(this.base, parseNodeVisitor) === ParseNodeVisitResult.Stop) {
+      return ParseNodeVisitResult.Stop;
+    }
+    return visitParseNodeAndChildren(this.literal, parseNodeVisitor);
+  }
 }
 
 export class Comment implements ParseNode {
@@ -476,9 +745,12 @@ export class Comment implements ParseNode {
     this.rawValue = rawValue;
   }
   type: string;
-  loc: ParseNodeLocation|undefined;
+  loc: ParseNodeLocation = invalidParseNodeLoc;
   value: string;
   rawValue: string;
+
+  // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
+  visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {return ParseNodeVisitResult.Continue;}
 }
 
 // Created when there's a problem reading a parse node, can stand in for any node.
@@ -487,8 +759,11 @@ export class ErroneousNode implements Statement, Expression, IfStatementClause {
     this.type = "ErroneousNode";
   }
   type: string;
-  loc: ParseNodeLocation|undefined;
+  loc: ParseNodeLocation = invalidParseNodeLoc;
   inParens: boolean|undefined;
+
+  // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
+  visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {return ParseNodeVisitResult.Continue;}
 }
 
 export interface LuaParseResults {
@@ -498,7 +773,9 @@ export interface LuaParseResults {
   readonly errors: Array<LuaSyntaxError>;
 }
 
-export function parseLuaSource(inputSource: string) : LuaParseResults {
+type OnCreateNodeCallback = (node: ParseNode) => void;
+
+export function parseLuaSource(inputSource: string, onCreateNodeCallback?: OnCreateNodeCallback) : LuaParseResults {
   // all tokens - including erroneous and comments
   let allTokens = new Array<LuaToken>();
   // tokens considered for parsing
@@ -1342,6 +1619,9 @@ export function parseLuaSource(inputSource: string) : LuaParseResults {
       parseNode.loc = loc;
     } else {
       lexer.raiseError(token, errorStrings.missingLocation);
+    }
+    if (onCreateNodeCallback) {
+      onCreateNodeCallback(parseNode);
     }
     return parseNode;
   }

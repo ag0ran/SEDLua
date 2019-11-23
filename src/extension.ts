@@ -3,7 +3,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as seFilesystem from './sefilesystem';
-import {DocumentCompletionHandler, DocumentCompletionInfo, TokenInfo, VariableInfo, DocumentParsingError} from './documentCompletionHandler';
+import {DocumentCompletionHandler, DocumentCompletionInfo, VariableInfo, DocumentParsingError, isMemberIndexingToken, isMemberIndexingChar} from './documentCompletionHandler';
 import {helpCompletionInfo, loadHelpCompletionInfo, HelpCompletionInfo, MacroFuncCompletionInfo, CvarFunctionCompletionInfo,
   CvarCompletionInfo, MacroClassCompletionInfo} from './seHelp';
 import {log} from "./log";
@@ -12,6 +12,7 @@ import { performance } from 'perf_hooks';
 import { refreshWorldScripts } from './worldScripts';
 import { WorldScriptsView } from './worldScriptsView';
 import { config, loadConfig} from './configuration';
+import { LuaTokenType, LuaToken } from './luaLexer';
 const util = require('util');
 const exec = util.promisify(require('child_process').exec);
 
@@ -395,30 +396,30 @@ class SEDLua implements vscode.CompletionItemProvider {
     let currentParseInfo = completionInfo.getParseInfoAroundOffset(currentOffset);
     if (currentParseInfo) {
       // in comment we can auto complete a type definition (<identifier> : <macro class name>)
-      if (currentParseInfo.token0 && currentParseInfo.token0.type === "Comment"
-          || currentParseInfo.token1Before && currentParseInfo.token1Before.type === "Comment") {
+      if (currentParseInfo.token0 && currentParseInfo.token0.type === LuaTokenType.Comment
+          || currentParseInfo.token1Before && currentParseInfo.token1Before.type === LuaTokenType.Comment) {
         let commentCompletionItems = this.provideCommentCompletionItems(document, position, token, context);
         if (commentCompletionItems) {
           return commentCompletionItems;
         }
       } else {
-        let indexedVarToken: TokenInfo|undefined;
+        let indexedVarToken: LuaToken|undefined;
         let indexingChar: string|undefined;
-        function isIndexingToken(token: TokenInfo|undefined) {return token && isIndexingChar(token.value);}
-        if (context.triggerCharacter && isIndexingChar(context.triggerCharacter)) {
+        function isMemberIndexingToken_Safe(token: LuaToken|undefined) {return token !== undefined && isMemberIndexingToken(token);}
+        if (context.triggerCharacter && isMemberIndexingChar(context.triggerCharacter)) {
           indexingChar = context.triggerCharacter;
           indexedVarToken = currentParseInfo.token1Before;
-        } else if (isIndexingToken(currentParseInfo.token0)) {
-          indexingChar = currentParseInfo.token0!.value;
+        } else if (isMemberIndexingToken_Safe(currentParseInfo.token0)) {
+          indexingChar = currentParseInfo.token0!.rawValue;
           indexedVarToken = currentParseInfo.token1Before;
-        } else if (isIndexingToken(currentParseInfo.token1Before)) {
-          indexingChar = currentParseInfo.token1Before!.value;
+        } else if (isMemberIndexingToken_Safe(currentParseInfo.token1Before)) {
+          indexingChar = currentParseInfo.token1Before!.rawValue;
           indexedVarToken = currentParseInfo.token2Before;
         }
 
-        if (indexedVarToken && indexedVarToken.type === "Identifier") {
+        if (indexedVarToken && indexedVarToken.type === LuaTokenType.Identifier) {
           let classCompletionItems = new Array<vscode.CompletionItem>();
-          let varInfo = completionInfo.getVariableInfo(indexedVarToken.value);
+          let varInfo = completionInfo.getVariableInfo(indexedVarToken.rawValue);
           if (varInfo && varInfo.type) {
             let macroClassInfo = helpCompletionInfo.findMacroClassInfo(varInfo.type);
             if (macroClassInfo) {
@@ -546,8 +547,6 @@ function getMacroFuncSignatureString(macroFunc: MacroFuncCompletionInfo) {
   let macroClassPrefix = macroFunc.macroClass ? `${macroFunc.macroClass.name}::` : "";
   return macroFunc.returnType + " " + macroClassPrefix + macroFunc.name + "(" + macroFunc.params + ")";
 }
-
-function isIndexingChar(char: string) {return char === '.' || char === ':';}
 
 function extractParamByIndex(params: string, iParam: number): string|undefined {
   let allParams = params.split(",");
