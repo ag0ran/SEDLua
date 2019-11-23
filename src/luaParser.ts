@@ -121,8 +121,22 @@ export class IfStatement implements Statement {
   }
 }
 
+export class Block implements ParseNode {
+  constructor(statements: Array<Statement>) {
+    this.statements = statements;
+  }
+  type = "Block";
+  loc: ParseNodeLocation = invalidParseNodeLoc;
+  statements: Array<Statement>;
+
+  // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
+  visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
+    return visitParseNodes(this.statements, parseNodeVisitor);
+  }
+}
+
 export class IfClause implements IfStatementClause {
-  constructor(condition: ParseNode, body: Array<Statement>) {
+  constructor(condition: ParseNode, body: Block) {
     this.type = 'IfClause';
     this.condition = condition;
     this.body = body;
@@ -130,19 +144,19 @@ export class IfClause implements IfStatementClause {
   type: string;
   loc: ParseNodeLocation = invalidParseNodeLoc;
   condition: ParseNode;
-  body: Array<Statement>;
+  body: Block;
 
   // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
   visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
     if (visitParseNodeAndChildren(this.condition, parseNodeVisitor) === ParseNodeVisitResult.Stop) {
       return ParseNodeVisitResult.Stop;
     }
-    return visitParseNodes(this.body, parseNodeVisitor);
+    return visitParseNodeAndChildren(this.body, parseNodeVisitor);
   }
 }
 
 export class ElseifClause implements IfStatementClause {
-  constructor(condition: ParseNode, body: Array<Statement>) {
+  constructor(condition: ParseNode, body: Block) {
     this.type = 'ElseifClause';
     this.condition = condition;
     this.body = body;
@@ -150,34 +164,34 @@ export class ElseifClause implements IfStatementClause {
   type: string;
   loc: ParseNodeLocation = invalidParseNodeLoc;
   condition: ParseNode;
-  body: Array<Statement>;
+  body: Block;
 
   // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
   visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
     if (visitParseNodeAndChildren(this.condition, parseNodeVisitor) === ParseNodeVisitResult.Stop) {
       return ParseNodeVisitResult.Stop;
     }
-    return visitParseNodes(this.body, parseNodeVisitor);
+    return visitParseNodeAndChildren(this.body, parseNodeVisitor);
   }
 }
 
 export class ElseClause implements IfStatementClause {
-  constructor(body: Array<Statement>) {
+  constructor(body: Block) {
     this.type = 'ElseClause';
     this.body = body;
   }
   type: string;
   loc: ParseNodeLocation = invalidParseNodeLoc;
-  body: Array<Statement>;
+  body: Block;
 
   // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
   visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
-    return visitParseNodes(this.body, parseNodeVisitor);
+    return visitParseNodeAndChildren(this.body, parseNodeVisitor);
   }
 }
 
 export class WhileStatement implements Statement {
-  constructor(condition: ParseNode, body: Array<Statement>) {
+  constructor(condition: ParseNode, body: Block) {
     this.type = 'WhileStatement';
     this.condition = condition;
     this.body = body;
@@ -185,34 +199,34 @@ export class WhileStatement implements Statement {
   type: string;
   loc: ParseNodeLocation = invalidParseNodeLoc;
   condition: ParseNode;
-  body: Array<Statement>;
+  body: Block;
 
   // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
   visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
     if (visitParseNodeAndChildren(this.condition, parseNodeVisitor) === ParseNodeVisitResult.Stop) {
       return ParseNodeVisitResult.Stop;
     }
-    return visitParseNodes(this.body, parseNodeVisitor);
+    return visitParseNodeAndChildren(this.body, parseNodeVisitor);
   }
 }
 
 export class DoStatement implements Statement {
-  constructor(body: Array<Statement>) {
+  constructor(body: Block) {
     this.type = 'DoStatement';
     this.body = body;
   }
   type: string;
   loc: ParseNodeLocation = invalidParseNodeLoc;
-  body: Array<Statement>;
+  body: Block;
 
   // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
   visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
-    return visitParseNodes(this.body, parseNodeVisitor);
+    return visitParseNodeAndChildren(this.body, parseNodeVisitor);
   }
 }
 
 export class RepeatStatement implements Statement {
-  constructor(condition: ParseNode, body: Array<Statement>) {
+  constructor(condition: ParseNode, body: Block) {
     this.type = 'RepeatStatement';
     this.condition = condition;
     this.body = body;
@@ -220,14 +234,14 @@ export class RepeatStatement implements Statement {
   type: string;
   loc: ParseNodeLocation = invalidParseNodeLoc;
   condition: ParseNode;
-  body: Array<Statement>;
+  body: Block;
 
   // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
   visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
     if (visitParseNodeAndChildren(this.condition, parseNodeVisitor) === ParseNodeVisitResult.Stop) {
       return ParseNodeVisitResult.Stop;
     }
-    return visitParseNodes(this.body, parseNodeVisitor);
+    return visitParseNodeAndChildren(this.body, parseNodeVisitor);
   }
 }
 
@@ -302,7 +316,7 @@ export interface Expression extends ParseNode {
 }
 
 export class FunctionDeclaration implements Statement, Expression {
-  constructor(identifier: ParseNode|undefined, isLocal: boolean, parameters: Array<Identifier|VarargLiteral>, body: Array<Statement>) {
+  constructor(identifier: ParseNode|undefined, isLocal: boolean, parameters: Array<Identifier|VarargLiteral>, body: Block) {
     this.type = 'FunctionDeclaration';
     this.identifier = identifier;
     this.isLocal = isLocal;
@@ -314,7 +328,7 @@ export class FunctionDeclaration implements Statement, Expression {
   identifier: ParseNode|undefined;
   isLocal: boolean;
   parameters: Array<Identifier|VarargLiteral>;
-  body: Array<Statement>;
+  body: Block;
   inParens: boolean|undefined;
 
   // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
@@ -325,12 +339,12 @@ export class FunctionDeclaration implements Statement, Expression {
     if (visitParseNodes(this.parameters, parseNodeVisitor) === ParseNodeVisitResult.Stop) {
       return ParseNodeVisitResult.Stop;
     }
-    return visitParseNodes(this.body, parseNodeVisitor);
+    return visitParseNodeAndChildren(this.body, parseNodeVisitor);
   }
 }
 
 export class ForNumericStatement implements Statement {
-  constructor(variable: Identifier, start: ParseNode, end: ParseNode, step: ParseNode|undefined, body: Array<Statement>) {
+  constructor(variable: Identifier, start: ParseNode, end: ParseNode, step: ParseNode|undefined, body: Block) {
     this.type = 'ForNumericStatement';
     this.variable = variable;
     this.start = start;
@@ -344,7 +358,7 @@ export class ForNumericStatement implements Statement {
   start: ParseNode;
   end: ParseNode;
   step: ParseNode|undefined;
-  body: Array<Statement>;
+  body: Block;
 
   // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
   visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
@@ -360,12 +374,12 @@ export class ForNumericStatement implements Statement {
     if (this.step && visitParseNodeAndChildren(this.step, parseNodeVisitor) === ParseNodeVisitResult.Stop) {
       return ParseNodeVisitResult.Stop;
     }
-    return visitParseNodes(this.body, parseNodeVisitor);
+    return visitParseNodeAndChildren(this.body, parseNodeVisitor);
   }
 }
 
 export class ForGenericStatement implements Statement {
-  constructor(variables: Array<Identifier>, iterators: Array<Expression>, body: Array<Statement>) {
+  constructor(variables: Array<Identifier>, iterators: Array<Expression>, body: Block) {
     this.type = 'ForGenericStatement';
     this.variables = variables;
     this.iterators = iterators;
@@ -375,7 +389,7 @@ export class ForGenericStatement implements Statement {
   loc: ParseNodeLocation = invalidParseNodeLoc;
   variables: Array<Identifier>;
   iterators: Array<Expression>;
-  body: Array<Statement>;
+  body: Block;
 
   // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
   visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
@@ -385,22 +399,22 @@ export class ForGenericStatement implements Statement {
     if (visitParseNodes(this.iterators, parseNodeVisitor) === ParseNodeVisitResult.Stop) {
       return ParseNodeVisitResult.Stop;
     }
-    return visitParseNodes(this.body, parseNodeVisitor);
+    return visitParseNodeAndChildren(this.body, parseNodeVisitor);
   }
 }
 
 export class Chunk implements ParseNode {
-  constructor(body: Array<Statement>) {
+  constructor(body: Block) {
     this.type = 'Chunk';
     this.body = body;
   }
   type: string;
   loc: ParseNodeLocation = invalidParseNodeLoc;
-  body: Array<Statement>;
+  body: Block;
 
   // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
   visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
-    return visitParseNodes(this.body, parseNodeVisitor);
+    return visitParseNodeAndChildren(this.body, parseNodeVisitor);
   }
 }
 
@@ -1578,15 +1592,16 @@ export function parseLuaSource(inputSource: string, onCreateNodeCallback?: OnCre
   // as its last statement.
   //
   //     block ::= {stat} [retstat]
-  function parseBlock() : Array<Statement> {
-    let block = new Array<Statement>();
+  function parseBlock() : Block {
+    markLocation();
+    let statements = new Array<Statement>();
 
     while (!isBlockFollow(token)) {
       // Return has to be the last statement in a block.
       if (token.rawValue === 'return') {
         let statement = parseStatement();
         if (statement) {
-          block.push(statement);
+          statements.push(statement);
         }
         break;
       }
@@ -1594,12 +1609,12 @@ export function parseLuaSource(inputSource: string, onCreateNodeCallback?: OnCre
       // Statements are only added if they are returned, this allows us to
       // ignore some statements, such as EmptyStatement.
       if (statement) {
-        block.push(statement);
+        statements.push(statement);
       }
     }
 
     // Doesn't really need an ast node
-    return block;
+    return finishNode(new Block(statements));
   }
 
   // array used to track locations
