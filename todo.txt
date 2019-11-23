@@ -1,0 +1,2 @@
+- warnings for group variables and Event and such functions
+- wanings for out of date world scripts
