@@ -23,5 +23,15 @@
     "body": "Wait($1)",
     "description": "Blocks execution until the waited condition is fulfilled.",
     "prefix": "Wait"
+  },
+  "Wait(Delay())": {
+    "body": "Wait(Delay($1))",
+    "description": "Blocks execution until provided number of seconds have passed.",
+    "prefix": "WaitDelay"
+  },
+  "Wait(Event())": {
+    "body": "Wait(Delay($1))",
+    "description": "Blocks execution until provided event was signaled.",
+    "prefix": "WaitEvent"
   }
 }
