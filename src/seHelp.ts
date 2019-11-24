@@ -96,6 +96,8 @@ export class LuaFunctionParamCompletionInfo {
 export class LuaFunctionCompletionInfo {
   name: string = "";
   desc: string = "";
+  // set for functions that have a base and accept the self parameter
+  self?: boolean;
   params = new Array<LuaFunctionParamCompletionInfo>();
   base?: LuaObjectCompletionInfo;
 }
