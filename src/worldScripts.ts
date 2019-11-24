@@ -125,7 +125,6 @@ export async function refreshWorldScripts(): Promise<boolean>
         worldScriptDumpString = worldScriptDumpString.replace(/^\uFEFF/, '');
         let worldScriptsList = JSON.parse(worldScriptDumpString);
         addWorldScriptsList(worldScriptsList);
-        log.printLine("Read world scripts from " + fileUri.fsPath);
       } catch (err) {
         log.printLine("Error reading world script from " + fileUri.fsPath + ": " + err.message);
       }
