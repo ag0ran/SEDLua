@@ -57,13 +57,18 @@ export class LuaObjectCompletionInfo {
   objects = new Array<LuaObjectCompletionInfo>();
   functions = new Array<LuaFunctionCompletionInfo>();
 
-  findCompletionInfoByName(name: string): LuaObjectCompletionInfo|LuaFunctionCompletionInfo|undefined {
-    for (let objInfo of this.objects) {
-      if (objInfo.name === name) {
-        return objInfo;
+  findCompletionInfoByName(name: string, onlySelf = false ): LuaObjectCompletionInfo|LuaFunctionCompletionInfo|undefined {
+    if (!onlySelf) {
+      for (let objInfo of this.objects) {
+        if (objInfo.name === name) {
+          return objInfo;
+        }
       }
     }
     for (let funcInfo of this.functions) {
+      if (onlySelf !== !!funcInfo.self) {
+        continue;
+      }
       if (funcInfo.name === name) {
         return funcInfo;
       }

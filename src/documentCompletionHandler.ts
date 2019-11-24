@@ -1,7 +1,7 @@
 import { LuaToken, LuaTokenType } from './luaLexer';
 import { parseLuaSource, LuaParseResults, ParseNode, Comment, MemberExpression, Identifier, ParseNodeVisitResult, visitParseNodes, CallExpression, FunctionDeclaration } from './luaParser';
 import * as vscode from 'vscode';
-import { helpCompletionInfo, MacroFuncCompletionInfo, CvarFunctionCompletionInfo, MacroClassCompletionInfo, LuaObjectCompletionInfo, LuaFunctionCompletionInfo } from './seHelp';
+import { helpCompletionInfo, MacroFuncCompletionInfo, CvarFunctionCompletionInfo, MacroClassCompletionInfo, LuaObjectCompletionInfo, LuaFunctionCompletionInfo, LuaCompletionInfo } from './seHelp';
 import {worldScriptsStorage} from './worldScripts';
 import * as seFilesystem from './sefilesystem';
 
@@ -102,7 +102,7 @@ export class DocumentCompletionInfo {
 
   // Tries to find a function call of a know function at given offset. Returns the function info and the current parameter index if function is found.
   getFunctionCallInfoAtOffset(offset: number):
-    [MacroFuncCompletionInfo|CvarFunctionCompletionInfo, number]|undefined
+    [MacroFuncCompletionInfo|CvarFunctionCompletionInfo|LuaFunctionCompletionInfo, number]|undefined
   {
     // go through the tokens starting at the current offset, trying to find opening '(' character preceeded by a known function
     let iTokenAtOffset = this.getTokenIndexAtOffset(offset);
@@ -185,7 +185,8 @@ export class DocumentCompletionInfo {
     }
 
     if (expressionBeforeInfo instanceof MacroFuncCompletionInfo
-        || expressionBeforeInfo instanceof CvarFunctionCompletionInfo) {
+        || expressionBeforeInfo instanceof CvarFunctionCompletionInfo
+        || expressionBeforeInfo instanceof LuaFunctionCompletionInfo) {
       return [expressionBeforeInfo, parameter];
     } else {
       return undefined;
@@ -272,7 +273,7 @@ export class DocumentCompletionInfo {
   }
 
   resolveIndexingExpressionAtToken(iStartingToken: number):
-    MacroFuncCompletionInfo|CvarFunctionCompletionInfo|MacroClassCompletionInfo|string|undefined
+    MacroFuncCompletionInfo|CvarFunctionCompletionInfo|MacroClassCompletionInfo|string|LuaFunctionCompletionInfo|LuaObjectCompletionInfo|undefined
   {
     let startingToken = this.tokens[iStartingToken];
     if (startingToken.type !== LuaTokenType.Identifier) {
@@ -298,8 +299,8 @@ export class DocumentCompletionInfo {
     }
 
     // going through the token chain in reverse and trying to index the chain up to current token
-    let lastInfo: MacroClassCompletionInfo|MacroFuncCompletionInfo|CvarFunctionCompletionInfo|string|undefined;
-    let indexWhat: string|undefined;
+    let lastInfo: MacroClassCompletionInfo|MacroFuncCompletionInfo|CvarFunctionCompletionInfo|LuaFunctionCompletionInfo|LuaObjectCompletionInfo|string|undefined;
+    let indexingToken: string|undefined;
     while (tokenChain.length > 0) {
       let token = tokenChain.pop()!;
       if (!lastInfo) {
@@ -308,8 +309,12 @@ export class DocumentCompletionInfo {
           return undefined;
         }
         let variableInfo = this.getVariableInfo(token.rawValue);
-        if (variableInfo && variableInfo.type) {
-          lastInfo = helpCompletionInfo.findMacroClassInfo(variableInfo.type);
+        if (variableInfo) {
+          if (variableInfo.type) {
+            lastInfo = helpCompletionInfo.findMacroClassInfo(variableInfo.type);
+          }
+        } else {
+          lastInfo = helpCompletionInfo.findLuaCompletionInfo(token.rawValue);
         }
         if (!lastInfo) {
           lastInfo = helpCompletionInfo.findCvarFuncInfo(token.rawValue);
@@ -321,41 +326,43 @@ export class DocumentCompletionInfo {
           return undefined;
         }
       } else {
-        if (indexWhat) {
-          if (!(lastInfo instanceof MacroClassCompletionInfo)) {
-            return undefined;
-          }
-          if (token.type !== LuaTokenType.Identifier) {
-            return undefined;
-          }
-          if (indexWhat === "Event") {
-            let eventName = token.rawValue;
-            if (!helpCompletionInfo.findMacroClassEvent(lastInfo, eventName)) {
+        if (indexingToken) {
+          if (lastInfo instanceof MacroClassCompletionInfo) {
+            if (token.type !== LuaTokenType.Identifier) {
               return undefined;
-            } else {
-                lastInfo = `Event ${lastInfo.name}.${eventName}`;
-              break;
             }
-          } else if (indexWhat === "Function") {
-            let functionName = token.rawValue;
-            let funcInfo = helpCompletionInfo.findMacroClassFunction(lastInfo, functionName);
-            if (!funcInfo) {
+            if (indexingToken === ".") {
+              let eventName = token.rawValue;
+              if (!helpCompletionInfo.findMacroClassEvent(lastInfo, eventName)) {
+                return undefined;
+              } else {
+                  lastInfo = `Event ${lastInfo.name}.${eventName}`;
+                break;
+              }
+            } else if (indexingToken === ":") {
+              let functionName = token.rawValue;
+              let funcInfo = helpCompletionInfo.findMacroClassFunction(lastInfo, functionName);
+              if (!funcInfo) {
+                return undefined;
+              } else {
+                  lastInfo = funcInfo;
+                break;
+              }
+            } else {
               return undefined;
-            } else {
-                lastInfo = funcInfo;
-              break;
             }
+          } else if (lastInfo instanceof LuaObjectCompletionInfo) {
+            let memberName = token.rawValue;
+            let onlySelf = indexingToken === ':';
+            return lastInfo.findCompletionInfoByName(memberName, onlySelf);
           } else {
             return undefined;
           }
         } else {
-          if (token!.value === ".") {
-            indexWhat = "Event";
-          } else if (token!.value === ":") {
-            indexWhat = "Function";
-          } else {
+          if (!isMemberIndexingToken(token)) {
             return undefined;
           }
+          indexingToken = token.rawValue;
         }
       }
     }

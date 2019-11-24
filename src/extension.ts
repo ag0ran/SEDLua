@@ -5,7 +5,7 @@ import * as path from 'path';
 import * as seFilesystem from './sefilesystem';
 import {DocumentCompletionHandler, DocumentCompletionInfo, VariableInfo, DocumentParsingError, isMemberIndexingToken, isMemberIndexingChar} from './documentCompletionHandler';
 import {helpCompletionInfo, loadHelpCompletionInfo, HelpCompletionInfo, MacroFuncCompletionInfo, CvarFunctionCompletionInfo,
-  CvarCompletionInfo, MacroClassCompletionInfo, LuaFunctionCompletionInfo, LuaObjectCompletionInfo} from './seHelp';
+  CvarCompletionInfo, MacroClassCompletionInfo, LuaFunctionCompletionInfo, LuaObjectCompletionInfo, LuaFunctionParamCompletionInfo} from './seHelp';
 import {log} from "./log";
 import fs = require('fs');
 import { performance } from 'perf_hooks';
@@ -68,25 +68,43 @@ class SEDLua implements vscode.CompletionItemProvider {
     }
     let [funcInfo, iParam] = functionCallInfo;
 
-    let signatureHelp = new vscode.SignatureHelp();
     let funcSignatureString: string|undefined;
+    let language;
+    let comment;
+    let paramString;
+    let paramDesc = ' ';
     if (funcInfo instanceof MacroFuncCompletionInfo) {
       funcSignatureString = getMacroFuncSignatureString(funcInfo);
+      language = "c++";
+      comment = funcInfo.briefComment || funcInfo.detailComment;
+      paramString = extractMacroParamByIndex(funcInfo.params, iParam);
     } else if (funcInfo instanceof CvarFunctionCompletionInfo) {
       funcSignatureString = getCvarFuncSignatureString(funcInfo);
+      language = "c++";
+      comment = funcInfo.briefComment || funcInfo.detailComment;
+      paramString = extractMacroParamByIndex(funcInfo.params, iParam);
+    } else if (funcInfo instanceof LuaFunctionCompletionInfo) {
+      funcSignatureString = getLuaFuncSignatureString(funcInfo);
+      language = "lua";
+      comment = funcInfo.desc;
+      let paramInfo = extractLuaParamByIndex(funcInfo, iParam);
+      if (paramInfo) {
+        paramString = paramInfo.name;
+        paramDesc = paramInfo.desc;
+      }
     } else {
       return undefined;
     }
+    let signatureHelp = new vscode.SignatureHelp();
     let signatureInformation = new vscode.SignatureInformation(funcSignatureString);
     signatureInformation.label = funcSignatureString;
-    signatureInformation.documentation = createCppMarkdownWithComment(funcSignatureString, funcInfo.briefComment || funcInfo.detailComment);
+    signatureInformation.documentation = createCodeMarkdownWithComment(language, funcSignatureString, comment, '***');
     signatureHelp.signatures.push(signatureInformation);
 
-    let paramString = extractParamByIndex(funcInfo.params, iParam);
     if (paramString) {
       let param1 = new vscode.ParameterInformation(paramString);
-      param1.documentation = createCppMarkdownWithComment(paramString);
-      signatureInformation.parameters.push(param1);  
+      param1.documentation = createCodeMarkdownWithComment(language, paramString, paramDesc);
+      signatureInformation.parameters.push(param1);
     }
     signatureHelp.activeSignature = 0;
     signatureHelp.activeParameter = 0;
@@ -546,13 +564,7 @@ class SEDLua implements vscode.CompletionItemProvider {
 }
 
 function createLuaMarkdownWithComment(luaCode: string, comment?: string) {
-  let md = new vscode.MarkdownString();
-  md.appendCodeblock(luaCode, "lua");
-  if (comment && comment !== "") {
-    md.appendMarkdown("***");
-    md.appendText("\n" + comment);
-  }
-  return md;
+  return createCodeMarkdownWithComment("lua", luaCode, comment);
 }
 
 function getLuaFuncSignatureString(luaFuncInfo: LuaFunctionCompletionInfo) {
@@ -595,16 +607,21 @@ function createLuaObjectCompletionItem(objInfo: LuaObjectCompletionInfo) {
   return completionItem;
 }
 
-
-
-function createCppMarkdownWithComment(cppCode: string, comment?: string) {
+function createCodeMarkdownWithComment(language: string, code: string, comment?: string, prependMarkdown?: string) {
   let md = new vscode.MarkdownString();
-  md.appendCodeblock(cppCode, "c++");
+  if (prependMarkdown) {
+    md.appendMarkdown(prependMarkdown);
+  }
+  md.appendCodeblock(code, language);
   if (comment && comment !== "") {
     md.appendMarkdown("***");
     md.appendText("\n" + comment);
   }
   return md;
+}
+
+function createCppMarkdownWithComment(cppCode: string, comment?: string) {
+  return createCodeMarkdownWithComment("c++", cppCode, comment);
 }
 
 function createCvarCompletionItem(cvar: CvarCompletionInfo) {
@@ -642,7 +659,19 @@ function getMacroFuncSignatureString(macroFunc: MacroFuncCompletionInfo) {
   return macroFunc.returnType + " " + macroClassPrefix + macroFunc.name + "(" + macroFunc.params + ")";
 }
 
-function extractParamByIndex(params: string, iParam: number): string|undefined {
+function extractLuaParamByIndex(luaFuncInfo: LuaFunctionCompletionInfo, iParam: number): LuaFunctionParamCompletionInfo|undefined {
+  if (iParam >= luaFuncInfo.params.length) {
+    // if last parameter is the variable arg designator '...'
+    if (luaFuncInfo.params.length > 0 && luaFuncInfo.params[luaFuncInfo.params.length - 1].name === '...') {
+      // than all params that follow it, map to it
+      return luaFuncInfo.params[luaFuncInfo.params.length - 1];
+    }
+    return undefined;
+  }
+  return luaFuncInfo.params[iParam];
+}
+
+function extractMacroParamByIndex(params: string, iParam: number): string|undefined {
   let allParams = params.split(",");
   if (allParams.length === 0 || iParam >= allParams.length || iParam < 0) {
     return undefined;
