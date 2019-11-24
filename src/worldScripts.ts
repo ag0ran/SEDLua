@@ -19,18 +19,22 @@ interface ScriptInList {
 
 interface WorldScriptsList {
   world: string;
+  worldModifiedTimeMS?: number;
+  worldScriptsStale?: boolean;
   scripts: Array<ScriptInList>;
 }
 
 
 export class WorldScriptInfo {
-  constructor(world: string, entityId: number) {
+  constructor(world: string, entityId: number, stale: boolean) {
     this.world = world;
     this.entityId = entityId;
+    this.stale = stale;
   }
   world: string;
   entityId: number;
   variables: Map<string, VariableInfo> = new Map<string, VariableInfo>();
+  stale: boolean;
 }
 
 export class WorldScriptsStorage {
@@ -71,12 +75,27 @@ export let worldScriptsStorage = new WorldScriptsStorage();
 function addWorldScriptsList(worldScriptsList : WorldScriptsList)
 {
   let world = worldScriptsList.world;
+  let worldModifiedTimeMS = worldScriptsList.worldModifiedTimeMS;
+  worldScriptsList.worldScriptsStale = false;
+  if (worldModifiedTimeMS && worldModifiedTimeMS !== -1) {
+    let worldHardPath = seFilesystem.softPathToHardPath(world);
+    try {
+      let fileStats = fs.statSync(worldHardPath);
+      let currentWorldModifiedTimeMS = Math.trunc(fileStats.mtimeMs);
+      worldScriptsList.worldScriptsStale = currentWorldModifiedTimeMS !== worldModifiedTimeMS;
+    } catch(err) {
+      log.printLine(`Error getting file stats for ${worldHardPath}: ${err.message}`);
+      worldScriptsList.worldScriptsStale = true;
+    }
+  }
   for (const script of worldScriptsList.scripts) {
     let worldScriptInfos = getOrCreateScriptInfos(script.script);
     let scriptInfo = worldScriptInfos.find((scriptInfo) => (scriptInfo.world === world && scriptInfo.entityId === script.entityId));
     if (!scriptInfo) {
-      scriptInfo = new WorldScriptInfo(world, script.entityId);
+      scriptInfo = new WorldScriptInfo(world, script.entityId, worldScriptsList.worldScriptsStale);
       worldScriptInfos.push(scriptInfo);
+    } else {
+      scriptInfo.stale =  worldScriptsList.worldScriptsStale;
     }
     for (let v of script.variables) {
       scriptInfo.variables.set(v.name, new VariableInfo(v.type));

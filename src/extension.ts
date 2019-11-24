@@ -167,7 +167,7 @@ class SEDLua implements vscode.CompletionItemProvider {
 
     await SEDLua.collectHelpFiles();
 
-    this.workspaceCheckTimeoutId = setTimeout(this.workspaceCheckTimeoutCallback.bind(this), 300);
+    this.workspaceCheckTimeoutId = setInterval(this.workspaceCheckTimeoutCallback.bind(this), 1000);
   }
 
   private getDocumentCompletionInfo(document: vscode.TextDocument): DocumentCompletionInfo|undefined {

@@ -56,12 +56,18 @@ class ScriptVariableTreeItem extends WorldScriptsTreeItem {
 class ScriptInstanceTreeItem extends WorldScriptsTreeItem {
   constructor(parent: ScriptTreeItem, worldScriptInfo: WorldScriptInfo) {
     let worldFilename = path.basename(worldScriptInfo.world);
-    let label = `[${worldScriptInfo.entityId}] ${worldFilename}`;
+    let label;
+    if (worldScriptInfo.stale) {
+      label = `[${worldScriptInfo.entityId}] [STALE] ${worldFilename}`;
+    } else {
+      label = `[${worldScriptInfo.entityId}] ${worldFilename}`;
+    }
     super(label);
+    this.id = worldScriptInfo.world;
     this.description = worldFilename;
     this.tooltip = `[ScriptEntityId=${worldScriptInfo.entityId}] ${worldFilename}\n${worldScriptInfo.world}`;
     this.worldScriptInfo = worldScriptInfo;
-    this.iconPath = vscode.ThemeIcon.File;
+    this.iconPath = worldScriptInfo.stale ? vscode.ThemeIcon.Folder : vscode.ThemeIcon.File;
     this.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;
 
     this.parent = parent;
@@ -96,8 +102,19 @@ class ScriptTreeItem extends WorldScriptsTreeItem {
   constructor(worldScriptPath: string, worldScriptInfos: Array<WorldScriptInfo>) {
     let filename = path.basename(worldScriptPath);
     super(filename);
+    this.id = worldScriptPath;
     this.description = worldScriptPath;
     let instancesDescription: string;
+    let stale = false;
+    for (let scriptInfo of worldScriptInfos) {
+      if (scriptInfo.stale) {
+        stale = true;
+        break;
+      }
+    }
+    if (stale) {
+      this.label = `[STALE] ${filename}`;
+    }
     if (worldScriptInfos.length === 1) {
       let worldScriptInfo = worldScriptInfos[0];
       let worldFilename = path.basename(worldScriptInfo.world);
@@ -106,7 +123,7 @@ class ScriptTreeItem extends WorldScriptsTreeItem {
       instancesDescription = `${worldScriptInfos.length} instances`;
     }
     this.tooltip = `${this.description}\n${instancesDescription}`;
-    this.iconPath = vscode.ThemeIcon.File;
+    this.iconPath =vscode.ThemeIcon.File;
     this.resourceUri = softPathToUri(worldScriptPath);
     this.worldScriptInfos = worldScriptInfos;    
 
