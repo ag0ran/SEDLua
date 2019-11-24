@@ -3,9 +3,9 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as seFilesystem from './sefilesystem';
-import {DocumentCompletionHandler, DocumentCompletionInfo, VariableInfo, DocumentParsingError, isMemberIndexingToken, isMemberIndexingChar} from './documentCompletionHandler';
+import {DocumentCompletionHandler, DocumentCompletionInfo, isMemberIndexingToken, isMemberIndexingChar} from './documentCompletionHandler';
 import {helpCompletionInfo, loadHelpCompletionInfo, HelpCompletionInfo, MacroFuncCompletionInfo, CvarFunctionCompletionInfo,
-  CvarCompletionInfo, MacroClassCompletionInfo, LuaFunctionCompletionInfo, LuaObjectCompletionInfo, LuaFunctionParamCompletionInfo} from './seHelp';
+  CvarCompletionInfo, MacroClassCompletionInfo, LuaFunctionCompletionInfo, LuaObjectCompletionInfo, extractLuaParamByIndex, extractMacroParamByIndex} from './seHelp';
 import {log} from "./log";
 import fs = require('fs');
 import { performance } from 'perf_hooks';
@@ -491,29 +491,35 @@ class SEDLua implements vscode.CompletionItemProvider {
       }
     }
 
-    if (context.triggerCharacter === '"' || context.triggerCharacter === '\'') {
-      let scriptCompletionItems: Array<vscode.CompletionItem> = new Array<vscode.CompletionItem>();
-      function addScriptCompletionItem(softPath: string) {
-        let completionItem = new vscode.CompletionItem(softPath);
-        completionItem.kind = vscode.CompletionItemKind.File;
-        completionItem.documentation = path.basename(softPath) + '\nin '+ path.dirname(softPath);
-        scriptCompletionItems.push(completionItem);
-      }
-      for (const doc of vscode.workspace.textDocuments) {
-        if (!doc.fileName.endsWith(".lua") || doc === document) {
-          continue;
+    // handle completion of function param strings that correspond to parameters that expect a script filename
+    if (currentParseInfo && currentParseInfo.token0 && currentParseInfo.token0.type === LuaTokenType.StringLiteral) {
+      let funcCallParamAtOffset = completionInfo.getFunctionCallParamInfoAtOffset(currentOffset);
+      if (funcCallParamAtOffset && isScriptFilenameParam(funcCallParamAtOffset.name)) {
+        let scriptCompletionItems: Array<vscode.CompletionItem> = new Array<vscode.CompletionItem>();
+        function addScriptCompletionItem(softPath: string) {
+          let completionItem = new vscode.CompletionItem(softPath);
+          completionItem.kind = vscode.CompletionItemKind.File;
+          completionItem.documentation = path.basename(softPath) + '\nin '+ path.dirname(softPath);
+          scriptCompletionItems.push(completionItem);
         }
-        let docSoftPath = this.extractContentSoftPath(doc.fileName);
-        if (docSoftPath === "") {
-          continue;
+        for (const doc of vscode.workspace.textDocuments) {
+          if (!doc.fileName.endsWith(".lua") || doc === document) {
+            continue;
+          }
+          let docSoftPath = this.extractContentSoftPath(doc.fileName);
+          if (docSoftPath === "") {
+            continue;
+          }
+          addScriptCompletionItem(docSoftPath);
         }
-        addScriptCompletionItem(docSoftPath);
-      }
 
-      for (const scriptSoftPath of this.workspaceScripts) {
-        addScriptCompletionItem(scriptSoftPath);
+        for (const scriptSoftPath of this.workspaceScripts) {
+          addScriptCompletionItem(scriptSoftPath);
+        }
+        return scriptCompletionItems;
       }
-      return scriptCompletionItems;
+      // no other way for autocompleting string literals for now
+      return undefined;
     }
 
     let funcAndVarCompletionItems = new Array<vscode.CompletionItem>();
@@ -659,30 +665,6 @@ function getMacroFuncSignatureString(macroFunc: MacroFuncCompletionInfo) {
   return macroFunc.returnType + " " + macroClassPrefix + macroFunc.name + "(" + macroFunc.params + ")";
 }
 
-function extractLuaParamByIndex(luaFuncInfo: LuaFunctionCompletionInfo, iParam: number): LuaFunctionParamCompletionInfo|undefined {
-  if (iParam >= luaFuncInfo.params.length) {
-    // if last parameter is the variable arg designator '...'
-    if (luaFuncInfo.params.length > 0 && luaFuncInfo.params[luaFuncInfo.params.length - 1].name === '...') {
-      // than all params that follow it, map to it
-      return luaFuncInfo.params[luaFuncInfo.params.length - 1];
-    }
-    return undefined;
-  }
-  return luaFuncInfo.params[iParam];
-}
-
-function extractMacroParamByIndex(params: string, iParam: number): string|undefined {
-  let allParams = params.split(",");
-  if (allParams.length === 0 || iParam >= allParams.length || iParam < 0) {
-    return undefined;
-  }
-  let param = allParams[iParam].trim();
-  if (param === "void") {
-    return undefined;
-  }
-  return param;
-}
-
 function isReadOnly(document: vscode.TextDocument) {
   try {
       fs.accessSync(document.fileName, fs.constants.W_OK);
@@ -690,6 +672,12 @@ function isReadOnly(document: vscode.TextDocument) {
   } catch (error) {
       return true;
   }
+}
+
+function isScriptFilenameParam(name: string) {
+  // param name should have 'script' and 'file' or 'path' in it
+  return name.match(/script/i) !== null && (name.match(/file/i) !== null || name.match(/path/i) !== null);
+
 }
 
 // Called when extension is first activated.

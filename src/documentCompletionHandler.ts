@@ -1,7 +1,8 @@
 import { LuaToken, LuaTokenType } from './luaLexer';
 import { parseLuaSource, LuaParseResults, ParseNode, Comment, MemberExpression, Identifier, ParseNodeVisitResult, visitParseNodes, CallExpression, FunctionDeclaration } from './luaParser';
 import * as vscode from 'vscode';
-import { helpCompletionInfo, MacroFuncCompletionInfo, CvarFunctionCompletionInfo, MacroClassCompletionInfo, LuaObjectCompletionInfo, LuaFunctionCompletionInfo, LuaCompletionInfo } from './seHelp';
+import { helpCompletionInfo, MacroFuncCompletionInfo, CvarFunctionCompletionInfo, MacroClassCompletionInfo,
+  LuaObjectCompletionInfo, LuaFunctionCompletionInfo, extractLuaParamByIndex, extractMacroParamByIndex } from './seHelp';
 import {worldScriptsStorage} from './worldScripts';
 import * as seFilesystem from './sefilesystem';
 
@@ -17,6 +18,11 @@ export class ParseInfo {
   token2Before: LuaToken|undefined;
   token1Before: LuaToken|undefined;
   token0: LuaToken|undefined;
+}
+
+interface FuncCallParamInfo {
+  name: string;
+  type?: string;
 }
 
 export class DocumentCompletionInfo {
@@ -100,7 +106,43 @@ export class DocumentCompletionInfo {
     return undefined;
   }
 
-  // Tries to find a function call of a know function at given offset. Returns the function info and the current parameter index if function is found.
+  // Tries to find a function call of a known function at given offset. Returns the parameter info at provided offset
+  getFunctionCallParamInfoAtOffset(offset: number): FuncCallParamInfo|undefined {
+    let functionCallInfo = this.getFunctionCallInfoAtOffset(offset);
+    if (!functionCallInfo) {
+      return undefined;
+    }
+    let [funcInfo, iParam] = functionCallInfo;
+    if (funcInfo instanceof MacroFuncCompletionInfo) {
+      let paramString = extractMacroParamByIndex(funcInfo.params, iParam);
+      if (paramString === undefined) {
+        return undefined;
+      }
+      return {
+        name: paramString
+      };
+    } else if (funcInfo instanceof CvarFunctionCompletionInfo) {
+      let paramString = extractMacroParamByIndex(funcInfo.params, iParam);
+      if (paramString === undefined) {
+        return undefined;
+      }
+      return {
+        name: paramString
+      };
+    } else if (funcInfo instanceof LuaFunctionCompletionInfo) {
+      let paramInfo = extractLuaParamByIndex(funcInfo, iParam);
+      if (!paramInfo) {
+        return undefined;
+      }
+      return {
+        name: paramInfo.name
+      };
+    } else {
+      return undefined;
+    }
+  }
+
+  // Tries to find a function call of a known function at given offset. Returns the function info and the current parameter index if function is found.
   getFunctionCallInfoAtOffset(offset: number):
     [MacroFuncCompletionInfo|CvarFunctionCompletionInfo|LuaFunctionCompletionInfo, number]|undefined
   {

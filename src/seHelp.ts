@@ -376,3 +376,27 @@ export async function loadHelpCompletionInfo() {
     }
   }
 }
+
+export function extractLuaParamByIndex(luaFuncInfo: LuaFunctionCompletionInfo, iParam: number): LuaFunctionParamCompletionInfo|undefined {
+  if (iParam >= luaFuncInfo.params.length) {
+    // if last parameter is the variable arg designator '...'
+    if (luaFuncInfo.params.length > 0 && luaFuncInfo.params[luaFuncInfo.params.length - 1].name === '...') {
+      // than all params that follow it, map to it
+      return luaFuncInfo.params[luaFuncInfo.params.length - 1];
+    }
+    return undefined;
+  }
+  return luaFuncInfo.params[iParam];
+}
+
+export function extractMacroParamByIndex(params: string, iParam: number): string|undefined {
+  let allParams = params.split(",");
+  if (allParams.length === 0 || iParam >= allParams.length || iParam < 0) {
+    return undefined;
+  }
+  let param = allParams[iParam].trim();
+  if (param === "void") {
+    return undefined;
+  }
+  return param;
+}
