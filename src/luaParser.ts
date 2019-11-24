@@ -811,7 +811,8 @@ export function parseLuaSource(inputSource: string, onCreateNodeCallback?: OnCre
   let token = tokens[iToken];
 
   function moveToNextToken() {
-    token = tokens[++iToken];
+    iToken = Math.min(iToken + 1, tokens.length - 1);
+    token = tokens[iToken];
   }
 
   function isTokenInRange(iToken: number) {

@@ -33,6 +33,16 @@ function testParserSuccess() {
       let parseResults = parseLuaSource(testFileString);
       assert(parseResults.errors.length === 0);
   });
+
+  test('Member call at EOF', function() {
+    let testFileString = readTestFile("Content/ParsingErrors_MemberCallAtEOF.lua");
+    try {
+      let parseResults = parseLuaSource(testFileString);
+      assert(parseResults.errors.length > 0);
+  } catch(err) {
+      assert(false, `failed due to exception ${err.message}`);
+    }
+});
 }
 
 function extensiveParserTests() {
