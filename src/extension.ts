@@ -5,7 +5,7 @@ import * as path from 'path';
 import * as seFilesystem from './sefilesystem';
 import {DocumentCompletionHandler, DocumentCompletionInfo, VariableInfo, DocumentParsingError, isMemberIndexingToken, isMemberIndexingChar} from './documentCompletionHandler';
 import {helpCompletionInfo, loadHelpCompletionInfo, HelpCompletionInfo, MacroFuncCompletionInfo, CvarFunctionCompletionInfo,
-  CvarCompletionInfo, MacroClassCompletionInfo} from './seHelp';
+  CvarCompletionInfo, MacroClassCompletionInfo, LuaFunctionCompletionInfo, LuaObjectCompletionInfo} from './seHelp';
 import {log} from "./log";
 import fs = require('fs');
 import { performance } from 'perf_hooks';
@@ -127,6 +127,10 @@ class SEDLua implements vscode.CompletionItemProvider {
     } else if (lastInfo instanceof CvarFunctionCompletionInfo) {
       hover = new vscode.Hover(createCppMarkdownWithComment(getCvarFuncSignatureString(lastInfo),
         lastInfo.briefComment || lastInfo.detailComment));
+    } else if (lastInfo instanceof LuaFunctionCompletionInfo) {
+      hover = new vscode.Hover(createLuaMarkdownWithComment(getLuaFuncSignatureString(lastInfo), lastInfo.desc));
+    } else if (lastInfo instanceof LuaObjectCompletionInfo) {
+      hover = new vscode.Hover(createLuaMarkdownWithComment(getLuaObjectDescriptionString(lastInfo), lastInfo.desc));
     } else {
       return undefined;
     }
@@ -501,6 +505,32 @@ class SEDLua implements vscode.CompletionItemProvider {
   }
 
   private diagnosticsCollection = vscode.languages.createDiagnosticCollection("SEDLua");
+}
+
+function createLuaMarkdownWithComment(luaCode: string, comment?: string) {
+  let md = new vscode.MarkdownString();
+  md.appendCodeblock(luaCode, "lua");
+  if (comment && comment !== "") {
+    md.appendMarkdown("***");
+    md.appendText("\n" + comment);
+  }
+  return md;
+}
+
+function getLuaFuncSignatureString(luaFuncInfo: LuaFunctionCompletionInfo) {
+  let paramsString = '';
+  for (let param of luaFuncInfo.params) {
+    if (paramsString !== '') {
+      paramsString += `, ${param.name}`;
+    } else {
+      paramsString += param.name;
+    }
+  }
+  return `function ${luaFuncInfo.name}(${paramsString})`;
+}
+
+function getLuaObjectDescriptionString(objInfo: LuaObjectCompletionInfo) {
+  return objInfo.name;
 }
 
 function createCppMarkdownWithComment(cppCode: string, comment?: string) {

@@ -1,7 +1,7 @@
 import { LuaToken, LuaTokenType } from './luaLexer';
 import { parseLuaSource, LuaParseResults, ParseNode, Comment, MemberExpression, Identifier, ParseNodeVisitResult, visitParseNodes, CallExpression, FunctionDeclaration } from './luaParser';
 import * as vscode from 'vscode';
-import { helpCompletionInfo, MacroFuncCompletionInfo, CvarFunctionCompletionInfo, MacroClassCompletionInfo } from './seHelp';
+import { helpCompletionInfo, MacroFuncCompletionInfo, CvarFunctionCompletionInfo, MacroClassCompletionInfo, LuaObjectCompletionInfo, LuaFunctionCompletionInfo } from './seHelp';
 import {worldScriptsStorage} from './worldScripts';
 import * as seFilesystem from './sefilesystem';
 
@@ -193,7 +193,7 @@ export class DocumentCompletionInfo {
   }
 
   resolveMemberExpressionAtOffset(offset: number):
-  VariableInfo|MacroFuncCompletionInfo|CvarFunctionCompletionInfo|MacroClassCompletionInfo|string|undefined
+  VariableInfo|MacroFuncCompletionInfo|CvarFunctionCompletionInfo|MacroClassCompletionInfo|LuaObjectCompletionInfo|LuaFunctionCompletionInfo|string|undefined
   {
     if (this.parseResults  === undefined || this.parseResults.parsedChunk === undefined) {
       return undefined;
@@ -233,7 +233,7 @@ export class DocumentCompletionInfo {
     let documentCompletionInfo = this;
 
     function resolveMemberExpressionRecursive(memberExpression: any):
-      VariableInfo|MacroFuncCompletionInfo|CvarFunctionCompletionInfo|MacroClassCompletionInfo|string|undefined
+      VariableInfo|MacroFuncCompletionInfo|CvarFunctionCompletionInfo|MacroClassCompletionInfo|LuaObjectCompletionInfo|LuaFunctionCompletionInfo|string|undefined
     {
       if (memberExpression.type === "Identifier") {
         let variableInfo = documentCompletionInfo.getVariableInfo(memberExpression.name);
@@ -241,7 +241,7 @@ export class DocumentCompletionInfo {
           return variableInfo.type ? helpCompletionInfo.findMacroClassInfo(variableInfo.type) : undefined;
         }
         return helpCompletionInfo.findMacroFuncInfo(memberExpression.name)
-          || helpCompletionInfo.findCvarFuncInfo(memberExpression.name);
+          || helpCompletionInfo.findCvarFuncInfo(memberExpression.name) || helpCompletionInfo.findLuaCompletionInfo(memberExpression.name);
       } else if (memberExpression.type !== "MemberExpression") {
         return undefined;
       }
@@ -257,6 +257,8 @@ export class DocumentCompletionInfo {
         } else {
           return undefined;
         }
+      } else if (baseExpressionValue instanceof LuaObjectCompletionInfo) {
+        return baseExpressionValue.findCompletionInfoByName(memberExpression.identifier.name);
       } else {
         return undefined;
       }

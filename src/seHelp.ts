@@ -2,6 +2,8 @@ import xml2js = require('xml2js');
 import fs = require('fs');
 import * as vscode from 'vscode';
 import * as seFilesystem from './sefilesystem';
+import { log } from './log';
+import { loadConfig } from './configuration';
 
 function normalizeXmlValue(s: string) {
   return s.trim();
@@ -48,6 +50,72 @@ export class MacroClassCompletionInfo {
   briefComment: string = "";
 }
 
+export class LuaObjectCompletionInfo {
+  name: string = "";
+  desc: string = "";
+  objects = new Array<LuaObjectCompletionInfo>();
+  functions = new Array<LuaFunctionCompletionInfo>();
+
+  findCompletionInfoByName(name: string): LuaObjectCompletionInfo|LuaFunctionCompletionInfo|undefined {
+    for (let objInfo of this.objects) {
+      if (objInfo.name === name) {
+        return objInfo;
+      }
+    }
+    for (let funcInfo of this.functions) {
+      if (funcInfo.name === name) {
+        return funcInfo;
+      }
+    }
+  }
+}
+
+function cloneLuaObjectCompletionInfo(src: LuaObjectCompletionInfo): LuaObjectCompletionInfo {
+  let clone = new LuaObjectCompletionInfo();
+  clone.name = src.name;
+  clone.desc = src.desc;
+  for (let obj of src.objects) {
+    clone.objects.push(cloneLuaObjectCompletionInfo(obj));
+  }
+  for (let func of src.functions) {
+    clone.functions.push(cloneLuaFunctionCompletionInfo(func));
+  }
+  return clone;
+}
+
+export class LuaFunctionParamCompletionInfo {
+  name = "";
+  desc = "";
+}
+
+export class LuaFunctionCompletionInfo {
+  name: string = "";
+  desc: string = "";
+  params = new Array<LuaFunctionParamCompletionInfo>();
+}
+function cloneLuaFunctionCompletionInfo(src: LuaFunctionCompletionInfo): LuaFunctionCompletionInfo {
+  let clone = new LuaFunctionCompletionInfo();
+  clone.name = src.name;
+  clone.desc = src.desc;
+  clone.params = src.params;
+  return clone;
+}
+
+export class LuaCompletionInfo {
+  objects = new Array<LuaObjectCompletionInfo>();
+  functions = new Array<LuaFunctionCompletionInfo>();
+
+  // Copies completion info from provided one
+  copyFrom(src: LuaCompletionInfo) {
+    for (let obj of src.objects) {
+      this.objects.push(cloneLuaObjectCompletionInfo(obj));
+    }
+    for (let func of src.functions) {
+      this.functions.push(cloneLuaFunctionCompletionInfo(func));
+    }
+  }
+}
+
 
 export class HelpCompletionInfo {
   cvars: CvarCompletionInfo[] = [];
@@ -58,6 +126,8 @@ export class HelpCompletionInfo {
   macroFunctions: MacroFuncCompletionInfo[] = [];
 
   processedFiles = new Set<string>();
+
+  luaCompletion = new LuaCompletionInfo();
 
   findMacroClassInfo(className: string): MacroClassCompletionInfo|undefined {
     let macroClassIndex = this.macroClassesMap.get(className);
@@ -126,6 +196,20 @@ export class HelpCompletionInfo {
 
   findCvarFuncInfo(funcName: string): CvarFunctionCompletionInfo|undefined {
     return this.cvarFunctions.find((funcInfo) => funcInfo.name === funcName);
+  }
+
+  findLuaCompletionInfo(name: string): LuaObjectCompletionInfo|LuaFunctionCompletionInfo|undefined {
+    for (let funcInfo of this.luaCompletion.functions) {
+      if (funcInfo.name === name) {
+        return funcInfo;
+      }
+    }
+    for (let objInfo of this.luaCompletion.objects) {
+      if (objInfo.name === name) {
+        return objInfo;
+      }
+    }
+    return undefined;
   }
 
   findMacroFuncInfo(funcName: string): MacroFuncCompletionInfo|undefined {
@@ -263,4 +347,19 @@ export async function loadHelpCompletionInfo() {
     }
   };
   await seFilesystem.forEachFileRecursiveAsync(forEachFileOptions);
+
+  // load lua autocomplete info
+  {
+    let sedLuaAutocompleteHardPath = seFilesystem.softPathToHardPath("Help/SEDLuaAutocomplete.json");
+    try {
+      let luaAutoCompleteJsonString = fs.readFileSync(sedLuaAutocompleteHardPath, "utf8");
+      let loadedLuaCompletion = JSON.parse(luaAutoCompleteJsonString);
+      helpCompletionInfo.luaCompletion.copyFrom(loadedLuaCompletion);
+      if (helpCompletionInfo.luaCompletion.functions.length > 0 || helpCompletionInfo.luaCompletion.objects.length > 0) {
+        log.printLine(`Read ${sedLuaAutocompleteHardPath}: ${helpCompletionInfo.luaCompletion.objects.length} global objects and ${helpCompletionInfo.luaCompletion.functions.length} global functions`);
+      }
+    } catch(err) {
+      log.printLine(`Error reading ${sedLuaAutocompleteHardPath}: ${err.message}`);
+    }
+  }
 }

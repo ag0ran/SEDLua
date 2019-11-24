@@ -1,0 +1,86 @@
+{
+  "objects": [
+    {
+      "name": "string",
+      "desc": "Lua string library.",
+      "objects": [],
+      "functions": [
+        {
+          "name": "char",
+          "desc": "Receives zero or more integers.\nReturns a string with length equal to the number of arguments,\nin which each character has the internal numerical\ncode equal to its corresponding argument.",
+          "params": [
+            {
+              "name": "...",
+              "desc": "Integer parameter for the character."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "table",
+      "desc": "Lua table library.",
+      "objects": [],
+      "functions": [
+        {
+          "name": "insert",
+          "desc": "Inserts element value at position pos in table, shifting up other elements to open space, if necessary. The default value for pos is n+1, where n is the length of the table, so that a call table.insert(t,x) inserts x at the end of table t.",
+          "params": [
+            {
+              "name": "table",
+              "desc": "Table in which element will be inserted."
+            },
+            {
+              "name": "value",
+              "desc": "Value at which will be inserted."
+            }
+          ]
+        },
+        {
+          "name": "insert",
+          "desc": "Inserts element value at position pos in table, shifting up other elements to open space, if necessary. The default value for pos is n+1, where n is the length of the table, so that a call table.insert(t,x) inserts x at the end of table t.",
+          "params": [
+            {
+              "name": "table",
+              "desc": "Table in which element will be inserted."
+            },
+            {
+              "name": "insertPos",
+              "desc": "Position at which value will be inserted."
+            },
+            {
+              "name": "value",
+              "desc": "Value at which will be inserted."
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "functions": [
+    {
+      "name": "dofile",
+      "desc":  "Executes provided script file. Returns values returned by the executed script.",
+      "params": [
+        {
+          "name": "scriptPath",
+          "desc": "Path to the script to execute."
+        },
+        {
+          "name": "...",
+          "desc": "Arguments provided to the executed script."
+        }
+      ]
+    },
+    {
+      "name": "import",
+      "desc":  "Executes provided script file if not already executed with import.\nReturns value returned by the script or the cached value from first execution.",
+      "params": [
+        {
+          "name": "scriptPath",
+          "desc": "Path to the script to execute."
+        }
+      ]
+    }
+  ]
+}
