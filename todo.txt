@@ -1,2 +1,8 @@
-- warnings for group variables and Event and such functions
+- MODE[cvar+macro] inside the first comment (world scripts in macro mode by default)
+- editor should reload modified scripts
+- fixed function/object info for built in lua functions and serious engine functions
 - wanings for out of date world scripts
+- extract enum values
+- warnings for global variables inside world scripts
+- warnings for group variables and Event and such functions
+- autocomplete string literals using filesystem!
