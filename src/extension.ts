@@ -518,6 +518,10 @@ function createLuaMarkdownWithComment(luaCode: string, comment?: string) {
 }
 
 function getLuaFuncSignatureString(luaFuncInfo: LuaFunctionCompletionInfo) {
+  let baseString = '';
+  for (let base = luaFuncInfo.base; base; base = base.base) {
+    baseString += `${base.name}.`;
+  }
   let paramsString = '';
   for (let param of luaFuncInfo.params) {
     if (paramsString !== '') {
@@ -526,11 +530,15 @@ function getLuaFuncSignatureString(luaFuncInfo: LuaFunctionCompletionInfo) {
       paramsString += param.name;
     }
   }
-  return `function ${luaFuncInfo.name}(${paramsString})`;
+  return `function ${baseString}${luaFuncInfo.name}(${paramsString})`;
 }
 
 function getLuaObjectDescriptionString(objInfo: LuaObjectCompletionInfo) {
-  return objInfo.name;
+  let baseString = '';
+  for (let base = objInfo.base; base; base = base.base) {
+    baseString += `${base.name}.`;
+  }
+  return baseString + objInfo.name;
 }
 
 function createCppMarkdownWithComment(cppCode: string, comment?: string) {

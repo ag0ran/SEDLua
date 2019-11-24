@@ -53,6 +53,7 @@ export class MacroClassCompletionInfo {
 export class LuaObjectCompletionInfo {
   name: string = "";
   desc: string = "";
+  base?: LuaObjectCompletionInfo;
   objects = new Array<LuaObjectCompletionInfo>();
   functions = new Array<LuaFunctionCompletionInfo>();
 
@@ -75,10 +76,14 @@ function cloneLuaObjectCompletionInfo(src: LuaObjectCompletionInfo): LuaObjectCo
   clone.name = src.name;
   clone.desc = src.desc;
   for (let obj of src.objects) {
-    clone.objects.push(cloneLuaObjectCompletionInfo(obj));
+    let objClone = cloneLuaObjectCompletionInfo(obj);
+    objClone.base = clone;
+    clone.objects.push(objClone);
   }
   for (let func of src.functions) {
-    clone.functions.push(cloneLuaFunctionCompletionInfo(func));
+    let funcClone = cloneLuaFunctionCompletionInfo(func);
+    funcClone.base = clone;
+    clone.functions.push(funcClone);
   }
   return clone;
 }
@@ -92,6 +97,7 @@ export class LuaFunctionCompletionInfo {
   name: string = "";
   desc: string = "";
   params = new Array<LuaFunctionParamCompletionInfo>();
+  base?: LuaObjectCompletionInfo;
 }
 function cloneLuaFunctionCompletionInfo(src: LuaFunctionCompletionInfo): LuaFunctionCompletionInfo {
   let clone = new LuaFunctionCompletionInfo();
