@@ -6,6 +6,7 @@ import * as seFilesystem from './sefilesystem';
 import {DocumentCompletionHandler, DocumentCompletionInfo, isMemberIndexingToken, isMemberIndexingChar} from './documentCompletionHandler';
 import {helpCompletionInfo, loadHelpCompletionInfo, HelpCompletionInfo, MacroFuncCompletionInfo, CvarFunctionCompletionInfo,
   CvarCompletionInfo, MacroClassCompletionInfo, LuaFunctionCompletionInfo, LuaObjectCompletionInfo, extractLuaParamByIndex, extractMacroParamByIndex} from './seHelp';
+import {worldScriptsStorage} from './worldScripts';
 import {log} from "./log";
 import fs = require('fs');
 import { performance } from 'perf_hooks';
@@ -551,16 +552,29 @@ class SEDLua implements vscode.CompletionItemProvider {
       }
     }
 
-    for (let cvar of helpCompletionInfo.cvars) {
-      funcAndVarCompletionItems.push(createCvarCompletionItem(cvar));
+    let documentSoftPath = seFilesystem.uriToSoftpath(document.uri);
+
+    let isWorldScript = !!worldScriptsStorage.getVarInfosForScript(documentSoftPath);
+    // for now, macro mode is always on
+    let macroMode = true;
+    // cvar mode is currently excluded only for world scripts
+    let cvarMode = !isWorldScript;
+
+    // add cvar completion in cvar mode
+    if (cvarMode) {
+      for (let cvar of helpCompletionInfo.cvars) {
+        funcAndVarCompletionItems.push(createCvarCompletionItem(cvar));
+      }
+      for (let cvarFunc of helpCompletionInfo.cvarFunctions) {
+        funcAndVarCompletionItems.push(createCvarFuncCompletionItem(cvarFunc));
+      }
     }
 
-    for (let cvarFunc of helpCompletionInfo.cvarFunctions) {
-      funcAndVarCompletionItems.push(createCvarFuncCompletionItem(cvarFunc));
-    }
-
-    for (let macroFunc of helpCompletionInfo.macroFunctions) {
-      funcAndVarCompletionItems.push(createMacroFuncCompletionItem(macroFunc));
+    // add macro completion in macro mode
+    if (macroMode) {
+      for (let macroFunc of helpCompletionInfo.macroFunctions) {
+        funcAndVarCompletionItems.push(createMacroFuncCompletionItem(macroFunc));
+      }
     }
 
     return funcAndVarCompletionItems;
