@@ -70,7 +70,7 @@
   },
  
   "while": {
-    "body": "while ${0:condition} do\n\t${1:--body}\nend",
+    "body": "while ${1:condition} do\n\t${2:--body}\nend",
     "description": "while loop, repeats while the condition evaluates to true.",
     "prefix": "while"
   },
