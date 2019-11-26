@@ -261,12 +261,21 @@ class SEDLua implements vscode.CompletionItemProvider {
         const checkOutOption = "Check out";
         let option = await vscode.window.showErrorMessage(`${e.document.fileName} is read only.`, {modal: true}, checkOutOption);
         if (option === checkOutOption) {
-          const { stdout, stderr } = await exec(`p4 edit ${e.document.fileName}`);
-          if (!stderr || stderr === "") {
-            log.printLine("Result of perforce command:\n" + stdout);
-            allowEdit = true;
-          } else {
-            log.printLine("Error checking out file:" + stderr);
+          let checkOutError = "";
+          try {
+            const { stdout, stderr } = await exec(`p4 edit ${e.document.fileName}`);
+            if (!stderr || stderr === "") {
+              log.printLine("Result of perforce command:\n" + stdout);
+              allowEdit = true;
+            } else {
+              checkOutError = "Error checking out file: " + stderr;
+            }
+          } catch (err) {
+            checkOutError = "Error checking out file: " + err.message;
+          }
+          if (checkOutError) {
+            log.printLine(checkOutError);
+            vscode.window.showErrorMessage(checkOutError, {modal: true});
           }
         }
       }
