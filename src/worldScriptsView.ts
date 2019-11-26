@@ -63,9 +63,11 @@ class ScriptInstanceTreeItem extends WorldScriptsTreeItem {
       label = `[${worldScriptInfo.entityId}] ${worldFilename}`;
     }
     super(label);
-    this.id = worldScriptInfo.world;
     this.description = worldFilename;
     this.tooltip = `[ScriptEntityId=${worldScriptInfo.entityId}] ${worldFilename}\n${worldScriptInfo.world}`;
+    if (worldScriptInfo.stale) {
+      this.tooltip += staleWorldDescription;
+    }
     this.worldScriptInfo = worldScriptInfo;
     this.iconPath = worldScriptInfo.stale ? vscode.ThemeIcon.Folder : vscode.ThemeIcon.File;
     this.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;
@@ -98,11 +100,12 @@ class ScriptInstanceTreeItem extends WorldScriptsTreeItem {
   private parent: ScriptTreeItem;
 }
 
+const staleWorldDescription = `\n[STALE]\nThe world was changed in the meantime so script variables may not be up to date\nOpen the world in editor to refresh the script variables.`;
+
 class ScriptTreeItem extends WorldScriptsTreeItem {
   constructor(worldScriptPath: string, worldScriptInfos: Array<WorldScriptInfo>) {
     let filename = path.basename(worldScriptPath);
     super(filename);
-    this.id = worldScriptPath;
     this.description = worldScriptPath;
     let instancesDescription: string;
     let stale = false;
@@ -123,6 +126,10 @@ class ScriptTreeItem extends WorldScriptsTreeItem {
       instancesDescription = `${worldScriptInfos.length} instances`;
     }
     this.tooltip = `${this.description}\n${instancesDescription}`;
+    if (stale) {
+      this.tooltip += staleWorldDescription;
+    }
+
     this.iconPath =vscode.ThemeIcon.File;
     this.resourceUri = softPathToUri(worldScriptPath);
     this.worldScriptInfos = worldScriptInfos;    
