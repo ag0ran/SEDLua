@@ -380,10 +380,31 @@ class SEDLua implements vscode.CompletionItemProvider {
     this.initWorkspace();
   }
 
-  private provideCommentCompletionItems(document: vscode.TextDocument, position: vscode.Position,
-    token: vscode.CancellationToken, context: vscode.CompletionContext
+  private provideCommentCompletionItems(document: vscode.TextDocument, completionInfo: DocumentCompletionInfo,
+    commentToken: LuaToken, position: vscode.Position, cancellationToken: vscode.CancellationToken, context: vscode.CompletionContext
     ): vscode.ProviderResult<vscode.CompletionItem[] | vscode.CompletionList>
   {
+    // if token is the first token
+    if (commentToken === completionInfo.tokens[0]) {
+      let commentValue = commentToken.value as string;
+      let trimmedCommentValue = commentValue.trim().toUpperCase();
+      // if empty comment or part of HINT_MODE
+      const hintModePrefix = "HINT_MODE!";
+      if (trimmedCommentValue === '' || trimmedCommentValue.length <= hintModePrefix.length
+          && trimmedCommentValue.startsWith(hintModePrefix.substr(0, trimmedCommentValue.length))) {
+        // complete all possible values of hint mode
+        let completionItems = new Array<vscode.CompletionItem>();
+        function addHintModeCompletion(hintMode: string) {
+          let completionItem = new vscode.CompletionItem(hintMode);
+          completionItem.kind = vscode.CompletionItemKind.Value;
+          completionItems.push(completionItem);
+        }
+        addHintModeCompletion('HINT_MODE!cvar!');
+        addHintModeCompletion('HINT_MODE!macro!');
+        addHintModeCompletion('HINT_MODE!cvar!macro!');
+        return completionItems;
+      }
+    }
     let currentLine = document.lineAt(position.line);
     if (!currentLine) {
       return undefined;
@@ -428,12 +449,18 @@ class SEDLua implements vscode.CompletionItemProvider {
     let currentParseInfo = completionInfo.getParseInfoAroundOffset(currentOffset);
     if (currentParseInfo) {
       // in comment we can auto complete a type definition (<identifier> : <macro class name>)
-      if (currentParseInfo.token0 && currentParseInfo.token0.type === LuaTokenType.Comment
-          || currentParseInfo.token1Before && currentParseInfo.token1Before.type === LuaTokenType.Comment) {
-        let commentCompletionItems = this.provideCommentCompletionItems(document, position, token, context);
-        if (commentCompletionItems) {
-          return commentCompletionItems;
-        }
+      let commentToken;
+      if (currentParseInfo.token0 && currentParseInfo.token0.type === LuaTokenType.Comment) {
+        commentToken = currentParseInfo.token0;
+      } else if (currentParseInfo.token1Before && currentParseInfo.token1Before.type === LuaTokenType.Comment
+          && currentOffset >= currentParseInfo.token1Before.rangeStart && currentOffset <= currentParseInfo.token1Before.rangeEnd + 1
+          && position.line === currentParseInfo.token1Before.endLine) {
+        commentToken = currentParseInfo.token1Before;
+      }
+      if (commentToken) {
+        let commentCompletionItems = this.provideCommentCompletionItems(document, completionInfo, commentToken, position, token, context);
+        // we only provide comment completion items inside comments
+        return commentCompletionItems;
       } else {
         let indexedVarToken: LuaToken|undefined;
         let indexingChar: string|undefined;
@@ -561,16 +588,8 @@ class SEDLua implements vscode.CompletionItemProvider {
       }
     }
 
-    let documentSoftPath = seFilesystem.uriToSoftpath(document.uri);
-
-    let isWorldScript = !!worldScriptsStorage.getVarInfosForScript(documentSoftPath);
-    // for now, macro mode is always on
-    let macroMode = true;
-    // cvar mode is currently excluded only for world scripts
-    let cvarMode = !isWorldScript;
-
-    // add cvar completion in cvar mode
-    if (cvarMode) {
+    // add cvar completion in cvar hint mode
+    if (completionInfo.cvarHintMode) {
       for (let cvar of helpCompletionInfo.cvars) {
         funcAndVarCompletionItems.push(createCvarCompletionItem(cvar));
       }
@@ -579,8 +598,8 @@ class SEDLua implements vscode.CompletionItemProvider {
       }
     }
 
-    // add macro completion in macro mode
-    if (macroMode) {
+    // add macro completion in macro hint mode
+    if (completionInfo.macroHintMode) {
       for (let macroFunc of helpCompletionInfo.macroFunctions) {
         funcAndVarCompletionItems.push(createMacroFuncCompletionItem(macroFunc));
       }

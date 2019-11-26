@@ -38,6 +38,8 @@ export class DocumentCompletionInfo {
   errors: Array<DocumentParsingError>|undefined;
   warnings: Array<DocumentParsingError>|undefined;
   documentSoftPath: string;
+  cvarHintMode = true;
+  macroHintMode = true;
 
   getVariableInfoForToken(token: LuaToken): VariableInfo|undefined {
     if (token.type !== LuaTokenType.Identifier) {
@@ -447,7 +449,61 @@ export class DocumentCompletionHandler {
     let result = new DocumentCompletionInfo(documentSoftPath);
     function processTokens(tokens: Array<LuaToken>)
     {
+      // if first token in a file is a comment, it may signal the hint mode for the script
+      {
+        let firstToken = tokens[0];
+        let hintModeExplicitelySet = false;
+        if (firstToken && firstToken.type === LuaTokenType.Comment) {
+          const hintModePrefix = 'HINT_MODE!';
+          let commentValue = (firstToken.value as string).trim();
+          if (commentValue.startsWith(hintModePrefix)) {
+            let hintModes = commentValue.substr(hintModePrefix.length);
+            const cvarHintModeKeyword = 'cvar!';
+            const macroHintModeKeyword = 'macro!';
+
+            let cvarHintMode = false;
+            let macroHintMode = false;
+
+            while (true) {
+              if (hintModes.startsWith(cvarHintModeKeyword)) {
+                hintModes = hintModes.substr(cvarHintModeKeyword.length);
+                cvarHintMode = true;
+              } else if (hintModes.startsWith(macroHintModeKeyword)) {
+                hintModes = hintModes.substr(macroHintModeKeyword.length);
+                macroHintMode = true;
+              } else {
+                break;
+              }
+            }
+            // if some unexpected word remains, this is considered an error in hint mode specifier
+            let remainingModes = hintModes.match(/^\w+/);
+            if (remainingModes) {
+              hintModeExplicitelySet = false;
+              if (!result.warnings) {
+                result.warnings = [];
+              }
+              let errorRange = [firstToken.startLine - 1, firstToken.startCol - 1, firstToken.endLine - 1, firstToken.endCol - 1];
+              result.warnings.push(new DocumentParsingError(errorRange, `Error in hint mode specification!\nExpected values: "--HINT_MODE!cvar!macro!" or "--HINT_MODE!cvar!" or "--HINT_MODE!macro!"`));
+              hintModeExplicitelySet = false;
+            } else {
+              hintModeExplicitelySet = true;
+              result.cvarHintMode = cvarHintMode;
+              result.macroHintMode = macroHintMode;
+            }
+          }
+    }
+        // if hint mode is not explicitely set, we will consider world scripts in macro mode only
+        if (!hintModeExplicitelySet) {
+          // cvar hint mode is off by default for world scripts
+          let isWorldScript = !!worldScriptsStorage.getVarInfosForScript(result.documentSoftPath);
+          result.cvarHintMode = !isWorldScript;
+          // macro mode is always allowed when not specifically hinted
+          result.macroHintMode = true;
+        }
+      }
+
       for (let token of tokens) {
+        // comment tokens can hold type hints
         if (token.type === LuaTokenType.Comment) {
           let comment = token.value as string;
           // we have to be careful not to match a commented out call of a member function, therefore only whitespace is allowed before the end of the comment
