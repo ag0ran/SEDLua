@@ -1,5 +1,4 @@
 - removed world scripts should be removed from the tree
-- MODE:/cvar/macro/ inside the first comment (world scripts in macro mode by default)
 - editor should reload modified scripts
 - fixed function/object info for built in lua functions and serious engine functions
 - wanings for out of date world scripts
