@@ -52,6 +52,39 @@ class SEDLua implements vscode.CompletionItemProvider {
     context.subscriptions.push(
       vscode.workspace.onDidCloseTextDocument(doc => this.diagnosticsCollection.delete(doc.uri))
     );
+
+    context.subscriptions.push(vscode.commands.registerCommand("sedlua.p4CheckOut", this.p4CheckOut));
+  }
+
+  // Performs check out on current document
+  async p4CheckOut(document?: vscode.TextDocument)
+  {
+    if (!document) {
+      if (!vscode.window.activeTextEditor) {
+        return false;
+      }
+      document = vscode.window.activeTextEditor.document;
+      if (!document) {
+        return false;
+      }
+    }
+    let checkOutError = "";
+    try {
+      const { stdout, stderr } = await exec(`p4 edit ${document.fileName}`);
+      if (!stderr || stderr === "") {
+        log.printLine("Result of perforce command:\n" + stdout);
+        return true;
+      } else {
+        checkOutError = "Error checking out file: " + stderr;
+      }
+    } catch (err) {
+      checkOutError = "Error checking out file: " + err.message;
+    }
+    if (checkOutError) {
+      log.printLine(checkOutError);
+      vscode.window.showErrorMessage(checkOutError, {modal: true});
+    }
+    return false;
   }
 
   provideSignatureHelp(document: vscode.TextDocument, position: vscode.Position,
@@ -261,22 +294,7 @@ class SEDLua implements vscode.CompletionItemProvider {
         const checkOutOption = "Check out";
         let option = await vscode.window.showErrorMessage(`${e.document.fileName} is read only.`, {modal: true}, checkOutOption);
         if (option === checkOutOption) {
-          let checkOutError = "";
-          try {
-            const { stdout, stderr } = await exec(`p4 edit ${e.document.fileName}`);
-            if (!stderr || stderr === "") {
-              log.printLine("Result of perforce command:\n" + stdout);
-              allowEdit = true;
-            } else {
-              checkOutError = "Error checking out file: " + stderr;
-            }
-          } catch (err) {
-            checkOutError = "Error checking out file: " + err.message;
-          }
-          if (checkOutError) {
-            log.printLine(checkOutError);
-            vscode.window.showErrorMessage(checkOutError, {modal: true});
-          }
+          allowEdit = await this.p4CheckOut();
         }
       }
       if (!allowEdit) {

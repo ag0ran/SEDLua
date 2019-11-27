@@ -52,7 +52,22 @@
           "default": "allow edits"
         }
       }
-    }
+    },
+    "commands": [
+      {
+        "command": "sedlua.p4CheckOut",
+        "title": "p4 Check out",
+        "category": "SEDLua"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "sedlua.p4CheckOut",
+        "key": "ctrl+shift+enter",
+        "mac": "cmd+shift+enter",
+        "when": "editorTextFocus"
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
