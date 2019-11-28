@@ -3,6 +3,7 @@ import * as seFilesystem from './sefilesystem';
 import fs = require('fs');
 import {Uri} from 'vscode';
 import { VariableInfo } from './documentCompletionHandler';
+import * as path from 'path';
 
 let processedWorldScripts = new Map<Uri, Date>();
 
@@ -39,6 +40,8 @@ export class WorldScriptInfo {
 
 export class WorldScriptsStorage {
   worldScripts = new Map<string, Array<WorldScriptInfo>>();
+  lastScriptOpenedInEditor: string|undefined;
+  lastScriptOpenedInEditorModificationTime: number|undefined;
   getScriptInfo(scriptPath: string, worldPath?: string, entityId?: number): WorldScriptInfo|undefined {
     let worldScriptInfos = this.worldScripts.get(scriptPath);
     if (!worldScriptInfos) {
@@ -113,23 +116,33 @@ export async function refreshWorldScripts(): Promise<boolean>
     startingDirUri: seFilesystem.softPathToUri("Temp/WorldScripts"),
     forFileFunc: async (fileUri: Uri) => {
       try {
-        let lastModificationTime = processedWorldScripts.get(fileUri);
         let fileStats = fs.statSync(fileUri.fsPath);
+        let fileExt = path.extname(fileUri.fsPath);
+        // the rest is just for json scripts
+        if (fileExt !== ".json") {
+          let lastmtimeMS = worldScriptsStorage.lastScriptOpenedInEditorModificationTime;
+          let mtimeMS = fileStats.mtime.getMilliseconds();
+          if (path.basename(fileUri.fsPath) === "LastScriptOpenedInEditor.txt"
+              && (!lastmtimeMS || mtimeMS !== lastmtimeMS)) {
+            worldScriptsStorage.lastScriptOpenedInEditor = seFilesystem.readFileUtf8(fileUri.fsPath);
+            worldScriptsStorage.lastScriptOpenedInEditorModificationTime = mtimeMS;
+          }
+          return;
+        }
+        let lastModificationTime = processedWorldScripts.get(fileUri);
         if (fileStats.mtime === lastModificationTime) {
           return;
         }
         anythingChanged = true;
         processedWorldScripts.set(fileUri, fileStats.mtime);
-        let worldScriptDumpString = fs.readFileSync(fileUri.fsPath, "utf8");
-        // removing BOM
-        worldScriptDumpString = worldScriptDumpString.replace(/^\uFEFF/, '');
+        let worldScriptDumpString = seFilesystem.readFileUtf8(fileUri.fsPath);
         let worldScriptsList = JSON.parse(worldScriptDumpString);
         addWorldScriptsList(worldScriptsList);
       } catch (err) {
         log.printLine("Error reading world script from " + fileUri.fsPath + ": " + err.message);
       }
     },
-    fileFilter: new Set([".json"]),
+    fileFilter: new Set([".json", ".txt"]),
   };
   await seFilesystem.forEachFileRecursiveAsync(forEachFileOptions);
   return anythingChanged;

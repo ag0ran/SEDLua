@@ -1,6 +1,7 @@
 import {Uri, FileType, workspace, FileStat} from 'vscode';
 import * as path from 'path';
 import { log } from './log';
+import fs = require('fs');
 
 // Serious Engine related filesystem functions.
 
@@ -88,4 +89,12 @@ export async function forEachFileRecursiveAsync(options: ForEachFileOptions) {
   } catch (err) {
     log.printLine("Error reading files from " + options.startingDirUri.fsPath + ": " + err.message);
   }
+}
+
+export function readFileUtf8(hardPath: string): string
+{
+  let fileContents = fs.readFileSync(hardPath, "utf8");
+  // removing BOM
+  fileContents = fileContents.replace(/^\uFEFF/, '');
+  return fileContents;
 }
