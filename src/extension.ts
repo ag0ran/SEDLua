@@ -198,8 +198,8 @@ class SEDLua implements vscode.CompletionItemProvider {
     if (worldScriptsChanged) {
       this.worldScriptsView.refresh();
     }
-    // if some script was opened in editor
-    if (worldScriptsStorage.lastScriptOpenedInEditor) {
+    // if we should auto open last script opened in editor and some script was opened in editor
+    if (config.autoOpenLastScriptFromEditor && worldScriptsStorage.lastScriptOpenedInEditor) {
       // we should open it
       let lastScriptUri = seFilesystem.softPathToUri(worldScriptsStorage.lastScriptOpenedInEditor);
       // (clearing so it is not perpetually opened)

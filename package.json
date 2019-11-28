@@ -52,6 +52,11 @@
           ],
           "description": "Editing of read only files behavior",
           "default": "allow edits"
+        },
+        "sedlua.autoOpenLastScriptFromEditor": {
+          "type": "boolean",
+          "description": "Automatically open world scripts opened in Serious Editor?",
+          "default": true
         }
       }
     },
