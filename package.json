@@ -2,7 +2,7 @@
   "name": "sedlua",
   "displayName": "SEDLua",
   "description": "SeriousEditor Lua",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "publisher": "Croteam",
   "repository": {
     "type": "git",
@@ -16,7 +16,9 @@
     "Other"
   ],
   "activationEvents": [
-    "onLanguage:lua"
+    "workspaceContains:**/*.wld",
+    "workspaceContains:**/*.rsc",
+    "workspaceContains:**/WorldScripts.lua"
   ],
   "main": "./out/extension.js",
   "contributes": {
