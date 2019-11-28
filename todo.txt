@@ -1,5 +1,6 @@
 - removed world scripts should be removed from the tree
-- editor should reload modified scripts
+- option to have only last opened world's world scripts visible in world scripts
+- Serious Editor defaults for vscode workflow
 - fixed function/object info for built in lua functions and serious engine functions
 - wanings for out of date world scripts
 - extract enum values
