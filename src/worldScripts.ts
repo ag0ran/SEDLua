@@ -75,22 +75,45 @@ function getOrCreateScriptInfos(script: string) {
 
 export let worldScriptsStorage = new WorldScriptsStorage();
 
+// Deletes all world script dump files that are stale
+export async function removeStaleWorldScripts()
+{
+  let forEachFileOptions: seFilesystem.ForEachFileOptions = {
+    startingDirUri: seFilesystem.softPathToUri("Temp/WorldScripts"),
+    forFileFunc: async (fileUri: Uri) => {
+      try {
+        let worldScriptDumpString = seFilesystem.readFileUtf8(fileUri.fsPath);
+        let worldScriptsList = JSON.parse(worldScriptDumpString);
+        if (isStaleWorldScriptsList(worldScriptsList)) {
+          fs.unlinkSync(fileUri.fsPath);
+        }
+      } catch (err) {
+        log.printLine("Error reading world script from " + fileUri.fsPath + ": " + err.message);
+      }
+    },
+    fileFilter: new Set([".json"]),
+  };
+  await seFilesystem.forEachFileRecursiveAsync(forEachFileOptions);
+}
+
+function isStaleWorldScriptsList(worldScriptsList : WorldScriptsList) {
+  let world = worldScriptsList.world;
+  let worldModifiedTimeMS = worldScriptsList.worldModifiedTimeMS;
+  let worldHardPath = seFilesystem.softPathToHardPath(world);
+  try {
+    let fileStats = fs.statSync(worldHardPath);
+    let currentWorldModifiedTimeMS = Math.trunc(fileStats.mtimeMs);
+    return currentWorldModifiedTimeMS !== worldModifiedTimeMS;
+  } catch(err) {
+    log.printLine(`Error getting file stats for ${worldHardPath}: ${err.message}`);
+    return true;
+  }
+}
+
 function addWorldScriptsList(worldScriptsList : WorldScriptsList)
 {
   let world = worldScriptsList.world;
-  let worldModifiedTimeMS = worldScriptsList.worldModifiedTimeMS;
-  worldScriptsList.worldScriptsStale = false;
-  if (worldModifiedTimeMS && worldModifiedTimeMS !== -1) {
-    let worldHardPath = seFilesystem.softPathToHardPath(world);
-    try {
-      let fileStats = fs.statSync(worldHardPath);
-      let currentWorldModifiedTimeMS = Math.trunc(fileStats.mtimeMs);
-      worldScriptsList.worldScriptsStale = currentWorldModifiedTimeMS !== worldModifiedTimeMS;
-    } catch(err) {
-      log.printLine(`Error getting file stats for ${worldHardPath}: ${err.message}`);
-      worldScriptsList.worldScriptsStale = true;
-    }
-  }
+  worldScriptsList.worldScriptsStale = isStaleWorldScriptsList(worldScriptsList);
   for (const script of worldScriptsList.scripts) {
     let worldScriptInfos = getOrCreateScriptInfos(script.script);
     let scriptInfo = worldScriptInfos.find((scriptInfo) => (scriptInfo.world === world && scriptInfo.entityId === script.entityId));
@@ -106,11 +129,31 @@ function addWorldScriptsList(worldScriptsList : WorldScriptsList)
   }
 }
 
-
 // Refreshes world scripts from file. Returns whether anything had changed.
 export async function refreshWorldScripts(): Promise<boolean>
 {
   let anythingChanged = false;
+  // we will track all world scripts we have found so we can remove those that no longer exist
+  let foundWorldScripts = new Set<string>();
+  function removeNotFoundWorldScriptsLists() {
+    let somethingDeleted = false;
+    worldScriptsStorage.worldScripts.forEach((worldScriptInfos, scriptPath) => {
+      for (let i = worldScriptInfos.length - 1; i >= 0; i--) {
+        if (!foundWorldScripts.has(worldScriptInfos[i].world)) {
+          if (i === worldScriptInfos.length - 1) {
+            worldScriptInfos.pop();
+          } else {
+            worldScriptInfos.splice(i);
+          }
+          somethingDeleted = true;
+        }
+      }
+      if (worldScriptInfos.length === 0) {
+        worldScriptsStorage.worldScripts.delete(scriptPath);
+      }
+    });
+    return somethingDeleted;
+  }
   // check world dumped world scripts
   let forEachFileOptions: seFilesystem.ForEachFileOptions = {
     startingDirUri: seFilesystem.softPathToUri("Temp/WorldScripts"),
@@ -137,6 +180,7 @@ export async function refreshWorldScripts(): Promise<boolean>
         processedWorldScripts.set(fileUri, fileStats.mtime);
         let worldScriptDumpString = seFilesystem.readFileUtf8(fileUri.fsPath);
         let worldScriptsList = JSON.parse(worldScriptDumpString);
+        foundWorldScripts.add(worldScriptsList.world);
         addWorldScriptsList(worldScriptsList);
       } catch (err) {
         log.printLine("Error reading world script from " + fileUri.fsPath + ": " + err.message);
@@ -145,5 +189,11 @@ export async function refreshWorldScripts(): Promise<boolean>
     fileFilter: new Set([".json", ".txt"]),
   };
   await seFilesystem.forEachFileRecursiveAsync(forEachFileOptions);
+  
+  if (removeNotFoundWorldScriptsLists()) {
+    anythingChanged = true;
+  }
+  
+
   return anythingChanged;
 }

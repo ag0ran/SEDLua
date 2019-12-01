@@ -65,8 +65,20 @@
         "command": "sedlua.p4CheckOut",
         "title": "p4 Check out",
         "category": "SEDLua"
+      },
+      {
+        "title": "Remove stale world scripts",
+        "command": "sedlua.removeStaleWorldScripts"
       }
     ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "sedlua.removeStaleWorldScripts",
+          "when": "view == worldScripts"
+        }
+      ]
+    },
     "keybindings": [
       {
         "command": "sedlua.p4CheckOut",

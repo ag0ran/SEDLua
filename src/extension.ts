@@ -6,11 +6,10 @@ import * as seFilesystem from './sefilesystem';
 import {DocumentCompletionHandler, DocumentCompletionInfo, isMemberIndexingToken, isMemberIndexingChar} from './documentCompletionHandler';
 import {helpCompletionInfo, loadHelpCompletionInfo, HelpCompletionInfo, MacroFuncCompletionInfo, CvarFunctionCompletionInfo,
   CvarCompletionInfo, MacroClassCompletionInfo, LuaFunctionCompletionInfo, LuaObjectCompletionInfo, extractLuaParamByIndex, extractMacroParamByIndex} from './seHelp';
-import {worldScriptsStorage} from './worldScripts';
 import {log} from "./log";
 import fs = require('fs');
 import { performance } from 'perf_hooks';
-import { refreshWorldScripts } from './worldScripts';
+import { worldScriptsStorage, refreshWorldScripts, removeStaleWorldScripts } from './worldScripts';
 import { WorldScriptsView } from './worldScriptsView';
 import { config, loadConfig} from './configuration';
 import { LuaTokenType, LuaToken } from './luaLexer';
@@ -54,6 +53,7 @@ class SEDLua implements vscode.CompletionItemProvider {
     );
 
     context.subscriptions.push(vscode.commands.registerCommand("sedlua.p4CheckOut", this.p4CheckOut));
+    context.subscriptions.push(vscode.commands.registerCommand("sedlua.removeStaleWorldScripts", removeStaleWorldScripts));
   }
 
   // Performs check out on current document
