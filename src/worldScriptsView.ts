@@ -3,6 +3,7 @@ import { WorldScriptInfo, worldScriptsStorage } from './worldScripts';
 import * as path from 'path';
 import { softPathToUri } from './sefilesystem';
 import { performance } from 'perf_hooks';
+import { config } from './configuration';
 
 let lastOpenUri : vscode.Uri|undefined;
 let lastOpenTime: number|undefined;
@@ -145,8 +146,17 @@ class ScriptTreeItem extends WorldScriptsTreeItem {
 
   getChildren() {
     let children = new Array<WorldScriptsTreeItem>();
-    for (let worldScriptInfo of this.worldScriptInfos) {
-      children.push(new ScriptInstanceTreeItem(this, worldScriptInfo));
+     // collect only script instances belonging to last world opened in editor if such option is used and available
+     if (config.viewOnlyCurrentWorldScripts && worldScriptsStorage.lastWorldOpenedInEditor) {
+      for (let worldScriptInfo of this.worldScriptInfos) {
+        if (worldScriptInfo.world === worldScriptsStorage.lastWorldOpenedInEditor) {
+          children.push(new ScriptInstanceTreeItem(this, worldScriptInfo));
+        }
+      }
+     } else {
+      for (let worldScriptInfo of this.worldScriptInfos) {
+        children.push(new ScriptInstanceTreeItem(this, worldScriptInfo));
+      }
     }
     return children;
   }
@@ -182,10 +192,22 @@ class WorldScriptsViewProvider implements vscode.TreeDataProvider<WorldScriptsTr
     if (element) {
       return element.getChildren();
     }
+
     let children = new Array<WorldScriptsTreeItem>();
-    worldScriptsStorage.worldScripts.forEach((worldScriptInfos: WorldScriptInfo[], scriptPath) => {
-      children.push(new ScriptTreeItem(scriptPath, worldScriptInfos));
-    });
+    // collect only scripts belonging to last world opened in editor if such option is used and available
+    if (config.viewOnlyCurrentWorldScripts && worldScriptsStorage.lastWorldOpenedInEditor) {
+      worldScriptsStorage.worldScripts.forEach((worldScriptInfos: WorldScriptInfo[], scriptPath) => {
+        let isScriptInCurrentWorld = worldScriptInfos.findIndex((worldScriptInfo) => worldScriptInfo.world === worldScriptsStorage.lastWorldOpenedInEditor) !== -1;
+        if (isScriptInCurrentWorld) {
+          children.push(new ScriptTreeItem(scriptPath, worldScriptInfos));
+        }
+      });
+    // otherwise add all the scrits
+    } else {
+      worldScriptsStorage.worldScripts.forEach((worldScriptInfos: WorldScriptInfo[], scriptPath) => {
+        children.push(new ScriptTreeItem(scriptPath, worldScriptInfos));
+      });
+    }
     if (children.length === 0) {
       children.push(new DummyTreeItem());
     }

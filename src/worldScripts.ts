@@ -4,6 +4,7 @@ import fs = require('fs');
 import {Uri} from 'vscode';
 import { VariableInfo } from './documentCompletionHandler';
 import * as path from 'path';
+import { config } from './configuration';
 
 let processedWorldScripts = new Map<Uri, Date>();
 
@@ -41,6 +42,7 @@ export class WorldScriptInfo {
 export class WorldScriptsStorage {
   worldScripts = new Map<string, Array<WorldScriptInfo>>();
   lastScriptOpenedInEditor: string|undefined;
+  lastWorldOpenedInEditor: string|undefined;
   lastScriptOpenedInEditorModificationTime: number|undefined;
   getScriptInfo(scriptPath: string, worldPath?: string, entityId?: number): WorldScriptInfo|undefined {
     let worldScriptInfos = this.worldScripts.get(scriptPath);
@@ -163,12 +165,22 @@ export async function refreshWorldScripts(): Promise<boolean>
         let fileExt = path.extname(fileUri.fsPath);
         // the rest is just for json scripts
         if (fileExt !== ".json") {
-          let lastmtimeMS = worldScriptsStorage.lastScriptOpenedInEditorModificationTime;
           let mtimeMS = fileStats.mtime.getMilliseconds();
-          if (path.basename(fileUri.fsPath) === "LastScriptOpenedInEditor.txt"
-              && (!lastmtimeMS || mtimeMS !== lastmtimeMS)) {
-            worldScriptsStorage.lastScriptOpenedInEditor = seFilesystem.readFileUtf8(fileUri.fsPath);
-            worldScriptsStorage.lastScriptOpenedInEditorModificationTime = mtimeMS;
+          let pathBasename = path.basename(fileUri.fsPath);
+          if (pathBasename === "LastScriptOpenedInEditor.txt") {
+            let lastmtimeMS = worldScriptsStorage.lastScriptOpenedInEditorModificationTime;
+            if (!lastmtimeMS || mtimeMS !== lastmtimeMS) {
+              worldScriptsStorage.lastScriptOpenedInEditor = seFilesystem.readFileUtf8(fileUri.fsPath);
+              worldScriptsStorage.lastScriptOpenedInEditorModificationTime = mtimeMS;
+            }
+          } else if (pathBasename === "LastWorldOpenedInEditor.txt") {
+            let lastWorldOpenedInEditor = seFilesystem.readFileUtf8(fileUri.fsPath);
+            if (worldScriptsStorage.lastWorldOpenedInEditor !== lastWorldOpenedInEditor) {
+              worldScriptsStorage.lastWorldOpenedInEditor = lastWorldOpenedInEditor;
+              if (config.viewOnlyCurrentWorldScripts) {
+                anythingChanged = true;
+              }
+            }
           }
           return;
         }

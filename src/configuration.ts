@@ -5,11 +5,13 @@ type EditReadOnlyFilesBehavior = "allow edits"|"disable edits"|"disable edits an
 export interface Config {
   editReadOnlyFiles: EditReadOnlyFilesBehavior;
   autoOpenLastScriptFromEditor: boolean;
+  viewOnlyCurrentWorldScripts: boolean;
 }
 
 export let config: Config = {
   editReadOnlyFiles: "allow edits",
   autoOpenLastScriptFromEditor: true,
+  viewOnlyCurrentWorldScripts: true,
 };
 
 export function loadConfig() {

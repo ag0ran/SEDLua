@@ -2,7 +2,7 @@
   "name": "sedlua",
   "displayName": "SEDLua",
   "description": "SeriousEditor Lua",
-  "version": "0.0.2",
+  "version": "0.3.0",
   "publisher": "Croteam",
   "repository": {
     "type": "git",
@@ -56,6 +56,11 @@
         "sedlua.autoOpenLastScriptFromEditor": {
           "type": "boolean",
           "description": "Automatically open world scripts opened in Serious Editor?",
+          "default": true
+        },
+        "sedlua.viewOnlyCurrentWorldScripts": {
+          "type": "boolean",
+          "description": "View only scripts from last world opened in Serious Editor?",
           "default": true
         }
       }
