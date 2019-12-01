@@ -737,10 +737,11 @@ function getMacroFuncSignatureString(macroFunc: MacroFuncCompletionInfo) {
 
 function isReadOnly(document: vscode.TextDocument) {
   try {
-      fs.accessSync(document.fileName, fs.constants.W_OK);
-      return false;
+    fs.accessSync(document.fileName, fs.constants.W_OK);
+    return false;
   } catch (error) {
-      return true;
+    // if not accessible, it is read only only if it exists
+    return fs.existsSync(document.fileName);
   }
 }
 
