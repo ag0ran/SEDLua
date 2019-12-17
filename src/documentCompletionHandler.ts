@@ -438,7 +438,7 @@ export class DocumentCompletionHandler {
   getCompletionInfo(): DocumentCompletionInfo|undefined {
     return this.currentCompletionInfo;
   }
-  async getCompletionInfoNow(): Promise<DocumentCompletionInfo|undefined> {
+  getCompletionInfoNow(): DocumentCompletionInfo|undefined {
     return this.currentCompletionInfo;
   }
   async onDocumentChanged(e: vscode.TextDocumentChangeEvent) {

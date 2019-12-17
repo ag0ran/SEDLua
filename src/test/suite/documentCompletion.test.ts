@@ -14,7 +14,7 @@ async function testDocumentParsing() {
       let textDocument = await vscode.workspace.openTextDocument(sampleScriptUri);  
       assert(textDocument, "Unable to open document");
       let documentCompletionHandler = new DocumentCompletionHandler(textDocument);
-      let completionInfo = await documentCompletionHandler.getCompletionInfoNow();
+      let completionInfo = documentCompletionHandler.getCompletionInfoNow();
       assert(completionInfo, "Error getting completion info");
       completionInfo = completionInfo!;
       {
@@ -80,6 +80,25 @@ async function testDocumentParsing() {
   }
 }
 
+async function testGlobals() {
+  try {
+    test('Globals parsing', async function() {
+      let sampleScriptUri = softPathToUri("Content/GlobalsParsing.lua");
+      let textDocument = await vscode.workspace.openTextDocument(sampleScriptUri);  
+      assert(textDocument, "Unable to open document");
+      let documentCompletionHandler = new DocumentCompletionHandler(textDocument);
+      let completionInfo = documentCompletionHandler.getCompletionInfoNow();
+      assert(completionInfo, "Error getting completion info");
+      completionInfo = completionInfo!;
+      assert(completionInfo.parseResults);
+      let parseResults = completionInfo.parseResults!;
+      assert(parseResults.globals.length === 2);
+    });
+  } catch (err) {
+    assert(false, "Tests failed due to error: " + err.message);
+  }
+}
+
 async function testWorldScriptsParsing() {
   test('World scripts parsing', async function() {
     try {
@@ -95,7 +114,8 @@ async function testWorldScriptsParsing() {
   });
 }
 
-suite('Document completion', () => {
-  testDocumentParsing();
-  testWorldScriptsParsing();
+suite('Document completion', async () => {
+  await testDocumentParsing();
+  await testWorldScriptsParsing();
+  await testGlobals();
 });

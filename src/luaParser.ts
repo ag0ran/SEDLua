@@ -1686,7 +1686,6 @@ export function parseLuaSource(inputSource: string, onCreateNodeCallback?: OnCre
   function attachScope(identifier: Identifier, isLocal: boolean) {
     if (!isLocal) {
       addUniqueGlobal(identifier);
-      globals.push(identifier);
       return;
     }
     identifier.isLocal = isLocal;
