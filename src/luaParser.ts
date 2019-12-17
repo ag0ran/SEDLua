@@ -122,12 +122,15 @@ export class IfStatement implements Statement {
 }
 
 export class Block implements ParseNode {
-  constructor(statements: Array<Statement>) {
+  constructor(statements: Array<Statement>, scopeIdentifierInfos: Array<ScopedIdentifierInfo>) {
     this.statements = statements;
+    this.scopeIdentifierInfos = scopeIdentifierInfos;
   }
   type = "Block";
   loc: ParseNodeLocation = invalidParseNodeLoc;
   statements: Array<Statement>;
+  visibleLocals: Array<String>|undefined;
+  scopeIdentifierInfos: Array<ScopedIdentifierInfo>;
 
   // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
   visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {
@@ -780,6 +783,18 @@ export class ErroneousNode implements Statement, Expression, IfStatementClause {
   visitChildren(parseNodeVisitor: ParseNodeVisitorFunc): ParseNodeVisitResult {return ParseNodeVisitResult.Continue;}
 }
 
+
+export class ScopedIdentifierInfo {
+  constructor(name: string) {
+    this.name = name;
+  }
+  name: string;
+  identifier?: Identifier;
+  // Node at which identifier is initialized
+  initializeParseNode?: ParseNode;
+  description?: string;
+}
+
 export interface LuaParseResults {
   readonly tokens: Array<LuaToken>;
   readonly globals: Array<Identifier>;
@@ -1018,6 +1033,8 @@ export function parseLuaSource(inputSource: string, onCreateNodeCallback?: OnCre
       return undefined;
     }
 
+    let scopedParameterInfos = [];
+
     // The declaration has arguments
     if (!consumePunctuator(')')) {
       // Arguments are a comma separated list of identifiers, optionally ending
@@ -1026,7 +1043,7 @@ export function parseLuaSource(inputSource: string, onCreateNodeCallback?: OnCre
         if (token.type === LuaTokenType.Identifier) {
           var parameter = parseIdentifier();
           // Function parameters are local.
-          scopeIdentifier(parameter);
+          scopedParameterInfos.push(scopeIdentifier(parameter));
           parameters.push(parameter);
           if (consumePunctuator(',')) {
             continue;
@@ -1046,12 +1063,18 @@ export function parseLuaSource(inputSource: string, onCreateNodeCallback?: OnCre
         }
       }
     }
-
     var body = parseBlock();
     if (expectKeyword('end')) {
       destroyScope();
     }
-    return finishNode(new FunctionDeclaration(name, isLocal || false, parameters, body));
+    let funcDeclaration = new FunctionDeclaration(name, isLocal || false, parameters, body);
+    // set up scoped identifier infos for the parameters
+    if (scopedParameterInfos.length) {
+      for (let scopedParameterInfo of scopedParameterInfos) {
+        scopedParameterInfo.initializeParseNode = funcDeclaration;
+      }
+    }
+    return finishNode(funcDeclaration);
   }
 
   // Parse the function name as identifiers and member expressions.
@@ -1075,7 +1098,7 @@ export function parseLuaSource(inputSource: string, onCreateNodeCallback?: OnCre
       pushLocation(marker);
       let name = parseIdentifier();
       base = finishNode(new MemberExpression(base, ':', name));
-      scopeIdentifierName('self');
+      scopeIdentifierName('self').identifier = name;
     }
     return base;
   }
@@ -1277,7 +1300,7 @@ export function parseLuaSource(inputSource: string, onCreateNodeCallback?: OnCre
     let variable = parseIdentifier();
     // The start-identifier is local.
     createScope();
-    scopeIdentifier(variable);
+    let scopedForVariableInfo = scopeIdentifier(variable);
 
     // If the first expression is followed by a `=` punctuator, this is a
     // Numeric For Statement.
@@ -1295,16 +1318,19 @@ export function parseLuaSource(inputSource: string, onCreateNodeCallback?: OnCre
       expectKeyword('end');
       destroyScope();
 
-      return finishNode(new ForNumericStatement(variable, start, end, step, body));
+      let forStatement = new ForNumericStatement(variable, start, end, step, body);
+      scopedForVariableInfo.initializeParseNode = forStatement;
+      return finishNode(forStatement);
     }
     // If not, it's a Generic For Statement
     else {
       // The namelist can contain one or more identifiers.
       let variables = [variable];
+      let scopedVarInfos = [];
       while (consumePunctuator(',')) {
         variable = parseIdentifier();
         // Each variable in the namelist is locally scoped.
-        scopeIdentifier(variable);
+        scopedVarInfos.push(scopeIdentifier(variable));
         variables.push(variable);
       }
       expectKeyword('in');
@@ -1321,7 +1347,12 @@ export function parseLuaSource(inputSource: string, onCreateNodeCallback?: OnCre
       expectKeyword('end');
       destroyScope();
 
-      return finishNode(new ForGenericStatement(variables, iterators, body));
+      let forStatement = new ForGenericStatement(variables, iterators, body);
+      scopedForVariableInfo.initializeParseNode = forStatement;
+      for (let scopedVarInfo of scopedVarInfos) {
+        scopedVarInfo.initializeParseNode = forStatement;
+      }
+      return finishNode(forStatement);
     }
   }
 
@@ -1353,20 +1384,23 @@ export function parseLuaSource(inputSource: string, onCreateNodeCallback?: OnCre
         } while (consumePunctuator(','));
       }
 
+      let localStatement = new LocalStatement(variables, init);
       // Declarations doesn't exist before the statement has been evaluated.
       // Therefore assignments can't use their declarator. And the identifiers
       // shouldn't be added to the scope until the statement is complete.
       for (var i = 0, l = variables.length; i < l; i++) {
-        scopeIdentifier(variables[i]);
+        scopeIdentifier(variables[i]).initializeParseNode = localStatement;
       }
-      return finishNode(new LocalStatement(variables, init));
+      return finishNode(localStatement);
     }
     if (consumeKeyword('function')) {
       let name = parseIdentifier();
-      scopeIdentifier(name);
+      let scopedIdentifierInfo = scopeIdentifier(name);
       createScope();
       // MemberExpressions are not allowed in local function statements.
-      return parseFunctionDeclaration(name, true);
+      let functionDeclaration = parseFunctionDeclaration(name, true);
+      scopedIdentifierInfo.initializeParseNode = functionDeclaration;
+      return functionDeclaration;
     }
     // there's an error in local statement, so we will make an erroneous one
     raiseUnexpectedToken('<name>', token);
@@ -1615,7 +1649,7 @@ export function parseLuaSource(inputSource: string, onCreateNodeCallback?: OnCre
     }
 
     // Doesn't really need an ast node
-    return finishNode(new Block(statements));
+    return finishNode(new Block(statements, scopes[scopes.length - 1]));
   }
 
   // array used to track locations
@@ -1659,27 +1693,29 @@ export function parseLuaSource(inputSource: string, onCreateNodeCallback?: OnCre
     globals.push(identifier);
   }
 
-  let scopes = Array<Array<string>>();
-  scopes.push([]);
-  let scopeDepth = 0;
+  let scopes = Array<Array<ScopedIdentifierInfo>>();
   // Create a new scope inheriting all declarations from the previous scope.
   function createScope() {
-    let scope: Array<string> = scopes[scopeDepth++].slice(0);
-    scopes.push(scope);
+    scopes.push(new Array<ScopedIdentifierInfo>());
   }
   function destroyScope() {
     scopes.pop();
-    scopeDepth--;
   }
-  function scopeIdentifierName(name: string) {
-    let currentScope = scopes[scopeDepth];
-    if (currentScope.indexOf(name) === -1) {
-      currentScope.push(name);
+  function scopeIdentifierName(name: string) : ScopedIdentifierInfo {
+    let currentScope = scopes[scopes.length - 1];
+    let identifierInfo = currentScope.find((value) => value.name === name);
+    if (identifierInfo) {
+      return identifierInfo;
     }
+    identifierInfo = new ScopedIdentifierInfo(name);
+    currentScope.push(identifierInfo);
+    return identifierInfo;
   }
-  function scopeIdentifier(identifier: Identifier) {
-    scopeIdentifierName(identifier.name);
+  function scopeIdentifier(identifier: Identifier) : ScopedIdentifierInfo {
     attachScope(identifier, true);
+    let scopedIdentifierInfo = scopeIdentifierName(identifier.name);
+    scopedIdentifierInfo.identifier = identifier;
+    return scopedIdentifierInfo;
   }
   // Attach scope information to node. If the node is global, store it in the
   // globals array so we can return the information to the user.
@@ -1691,7 +1727,12 @@ export function parseLuaSource(inputSource: string, onCreateNodeCallback?: OnCre
     identifier.isLocal = isLocal;
   }
   function scopeHasName(name: string): boolean {
-    return scopes[scopeDepth].indexOf(name) !== -1;
+    for (let scope of scopes) {
+      if (scope.findIndex((value) => value.name === name) !== -1) {
+        return true;
+      }
+    }
+    return false;
   }
 
   function parseChunk() : Chunk {

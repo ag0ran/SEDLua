@@ -1,5 +1,5 @@
 import { LuaToken, LuaTokenType } from './luaLexer';
-import { parseLuaSource, LuaParseResults, ParseNode, Comment, MemberExpression, Identifier, ParseNodeVisitResult, visitParseNodes, CallExpression, FunctionDeclaration } from './luaParser';
+import { parseLuaSource, LuaParseResults, ParseNode, Comment, MemberExpression, Identifier, ParseNodeVisitResult, visitParseNodes, CallExpression, FunctionDeclaration, ScopedIdentifierInfo, Block } from './luaParser';
 import * as vscode from 'vscode';
 import { helpCompletionInfo, MacroFuncCompletionInfo, CvarFunctionCompletionInfo, MacroClassCompletionInfo,
   LuaObjectCompletionInfo, LuaFunctionCompletionInfo, extractLuaParamByIndex, extractMacroParamByIndex } from './seHelp';
@@ -66,6 +66,36 @@ export class DocumentCompletionInfo {
     if (varInfos) {
       varInfos.forEach(callbackFunc);
     }
+  }
+  // Calls the provided callback for all local variables available in block at given offset.
+  forEachLocalAtOffset(offset: number, callbackFunc: (identifierInfo: ScopedIdentifierInfo) => void) {
+    if (!this.parseResults || !this.parseResults.parsedChunk) {
+      return;
+    }
+    function goThroughBlockLocals(parseNode: ParseNode): ParseNodeVisitResult {
+      if (!parseNode.loc.containsPos(offset)) {
+        return ParseNodeVisitResult.SkipNode;
+      }
+      // we're interested in going through the block
+      if (parseNode.type === "Block") {
+        let block = parseNode as Block;
+        // since block is processed before its children, we need to visit the children first (as the innermost block takes precendence)
+        block.visitChildren(goThroughBlockLocals);
+
+        // now go through block's scope identifiers
+        for (let identifierInfo of block.scopeIdentifierInfos) {
+          // ignoring identifiers that don't exist at provided offset
+          if (identifierInfo.identifier && identifierInfo.identifier.loc.rangeStart > offset) {
+            continue;
+          }
+          callbackFunc(identifierInfo);
+        }
+        // since we've processed the children, we should skip processing them again so skip this block
+        return ParseNodeVisitResult.SkipNode;
+      }
+      return ParseNodeVisitResult.Continue;
+    }
+    this.parseResults.parsedChunk.visitChildren(goThroughBlockLocals);
   }
 
   getTokenIndexAtOffset(offset: number) : number {

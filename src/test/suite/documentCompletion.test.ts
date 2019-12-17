@@ -6,6 +6,7 @@ import {DocumentCompletionHandler, DocumentCompletionInfo} from '../../documentC
 import {helpCompletionInfo, HelpCompletionInfo, MacroFuncCompletionInfo, loadHelpCompletionInfo} from '../../seHelp';
 import fs = require('fs');
 import { softPathToUri, softPathToHardPath } from '../../sefilesystem';
+import { ScopedIdentifierInfo } from '../../luaParser';
 
 async function testDocumentParsing() {
   try {
@@ -80,10 +81,20 @@ async function testDocumentParsing() {
   }
 }
 
+class LocalsFinder {
+  locals = new Array<String>();
+  forEachLocalCallback(identifierInfo: ScopedIdentifierInfo) {
+    // identifiers masked by more local identifiers should be ignored
+    if (this.locals.indexOf(identifierInfo.name) === -1) {
+      this.locals.push(identifierInfo.name);
+    }
+  }
+}
+
 async function testGlobals() {
   try {
-    test('Globals parsing', async function() {
-      let sampleScriptUri = softPathToUri("Content/GlobalsParsing.lua");
+    test('Globals and locals parsing', async function() {
+      let sampleScriptUri = softPathToUri("Content/GlobalsAndLocals.lua");
       let textDocument = await vscode.workspace.openTextDocument(sampleScriptUri);  
       assert(textDocument, "Unable to open document");
       let documentCompletionHandler = new DocumentCompletionHandler(textDocument);
@@ -92,7 +103,59 @@ async function testGlobals() {
       completionInfo = completionInfo!;
       assert(completionInfo.parseResults);
       let parseResults = completionInfo.parseResults!;
+      // there should be 2 globals total
       assert(parseResults.globals.length === 2);
+      // testing locals at offset:
+      {
+        // right before locC
+        let offset = textDocument.offsetAt(new vscode.Position(9, 0));
+        let localsFinder = new LocalsFinder();
+        completionInfo.forEachLocalAtOffset(offset, localsFinder.forEachLocalCallback.bind(localsFinder));
+        assert(localsFinder.locals.length === 2);
+        assert(localsFinder.locals[0] === "locA");
+        assert(localsFinder.locals[1] === "locB");
+      }
+
+      {
+        // right after locC
+        let offset = textDocument.offsetAt(new vscode.Position(11, 0));
+        let localsFinder = new LocalsFinder();
+        completionInfo.forEachLocalAtOffset(offset, localsFinder.forEachLocalCallback.bind(localsFinder));
+        assert(localsFinder.locals.length === 3);
+        assert(localsFinder.locals[0] === "locA");
+        assert(localsFinder.locals[1] === "locB");
+        assert(localsFinder.locals[2] === "locC");
+      }
+      {
+        // at the start of newGlobal.func
+        let offset = textDocument.offsetAt(new vscode.Position(13, 2));
+        let localsFinder = new LocalsFinder();
+        completionInfo.forEachLocalAtOffset(offset, localsFinder.forEachLocalCallback.bind(localsFinder));
+        // 3 locals from outer scope + 3 locals from function parameters
+        assert(localsFinder.locals.length === 3 + 3);
+        assert(localsFinder.locals[0] === "p0");
+        assert(localsFinder.locals[1] === "p1");
+        assert(localsFinder.locals[2] === "p2");
+        assert(localsFinder.locals[3] === "locA");
+        assert(localsFinder.locals[4] === "locB");
+        assert(localsFinder.locals[5] === "locC");
+        
+      }
+
+      {
+        // at the end of newGlobal.func
+        let offset = textDocument.offsetAt(new vscode.Position(16, 2));
+        let localsFinder = new LocalsFinder();
+        completionInfo.forEachLocalAtOffset(offset, localsFinder.forEachLocalCallback.bind(localsFinder));
+        // 1 local from outer scope + 3 locals from function parameters + 2 locals masking ones from outer scope
+        assert(localsFinder.locals.length === 1 + 3 + 2);
+        assert(localsFinder.locals[0] === "p0");
+        assert(localsFinder.locals[1] === "p1");
+        assert(localsFinder.locals[2] === "p2");
+        assert(localsFinder.locals[3] === "locA");
+        assert(localsFinder.locals[4] === "locB");
+        assert(localsFinder.locals[5] === "locC");
+      }
     });
   } catch (err) {
     assert(false, "Tests failed due to error: " + err.message);

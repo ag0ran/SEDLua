@@ -1,3 +1,5 @@
+- Block rangeStart should include whitespace around it - otherwise block detection doesn't work before first token of the block and after the last token of the block!
+  - to test, change the: let offset = textDocument.offsetAt(new vscode.Position(13, 2)); to (13, 0) and properly detect the block!
 - removed world scripts should be removed from the tree
 - option to have only last opened world's world scripts visible in world scripts
 - Serious Editor defaults for vscode workflow

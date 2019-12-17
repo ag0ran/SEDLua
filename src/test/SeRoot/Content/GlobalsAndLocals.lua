@@ -8,6 +8,8 @@ newGlobal = {}
 newGlobal.a = "a"
 newGlobal.b.c = "b.c"
 
+local locC = 2
+
 function newGlobal.func(p0, p1, p2)
   newGlobal.d = {}
   local locA = 2
