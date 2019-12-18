@@ -46,6 +46,10 @@ export class LuaToken {
   isPunctuator(rawValue?: string): boolean {
     return this.isOfTypeWithValue(LuaTokenType.Punctuator, rawValue);
   }
+  // Checks whether token is an identifier with optional value.
+  isIdentifier(rawValue?: string): boolean {
+    return this.isOfTypeWithValue(LuaTokenType.Identifier, rawValue);
+  }
   private isOfTypeWithValue(type: LuaTokenType, rawValue?: string) {
     if (this.type !== type) {
       return false;

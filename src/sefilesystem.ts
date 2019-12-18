@@ -98,3 +98,8 @@ export function readFileUtf8(hardPath: string): string
   fileContents = fileContents.replace(/^\uFEFF/, '');
   return fileContents;
 }
+
+export function fileExists(softPath: string): boolean {
+  let hardPath = softPathToHardPath(softPath);
+  return fs.existsSync(hardPath);
+}

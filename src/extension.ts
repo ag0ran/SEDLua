@@ -13,10 +13,11 @@ import { worldScriptsStorage, refreshWorldScripts, removeStaleWorldScripts } fro
 import { WorldScriptsView } from './worldScriptsView';
 import { config, loadConfig} from './configuration';
 import { LuaTokenType, LuaToken } from './luaLexer';
+import { ScopedIdentifierInfo, ParseNodeLocation } from './luaParser';
 const util = require('util');
 const exec = util.promisify(require('child_process').exec);
 
-class SEDLua implements vscode.CompletionItemProvider {
+class SEDLua implements vscode.CompletionItemProvider, vscode.DefinitionProvider {
   constructor(context: vscode.ExtensionContext) {
     // handler for text document open
     context.subscriptions.push(
@@ -48,8 +49,12 @@ class SEDLua implements vscode.CompletionItemProvider {
     context.subscriptions.push(
       vscode.languages.registerHoverProvider("lua", this));
 
-      context.subscriptions.push(
-        vscode.languages.registerSignatureHelpProvider("lua", this, "("));
+    context.subscriptions.push(
+      vscode.languages.registerSignatureHelpProvider("lua", this, "("));
+
+    context.subscriptions.push(
+      vscode.languages.registerDefinitionProvider("lua", this));
+    
 
     context.subscriptions.push(
       vscode.workspace.onDidCloseTextDocument(doc => this.diagnosticsCollection.delete(doc.uri))
@@ -146,6 +151,65 @@ class SEDLua implements vscode.CompletionItemProvider {
     signatureHelp.activeSignature = 0;
     signatureHelp.activeParameter = 0;
     return signatureHelp;
+  }
+
+  provideDefinition(document: vscode.TextDocument, position: vscode.Position, cancellationToken: vscode.CancellationToken): vscode.ProviderResult<vscode.Definition | vscode.DefinitionLink[]> {
+    let completionInfo = this.getDocumentCompletionInfo(document);
+    if (!completionInfo) {
+      return undefined;
+    }
+    let wordRangeAtPosition = document.getWordRangeAtPosition(position);
+    if (!wordRangeAtPosition) {
+      return undefined;
+    }
+    let offset = document.offsetAt(position);
+    let iToken = completionInfo.getTokenIndexAtOffset(offset);
+    if (iToken === -1) {
+      return undefined;
+    }
+    
+    let token = completionInfo.getTokenByIndex(iToken);
+    // string literals might be links to other files
+    if (token.type === LuaTokenType.StringLiteral) {
+      let possibleSoftPath = token.value as string;
+      if (seFilesystem.fileExists(possibleSoftPath)) {
+        let def = new vscode.Location(seFilesystem.softPathToUri(possibleSoftPath), new vscode.Position(0, 0));
+        return def;
+      }
+      return undefined;
+    }
+
+    let wordAtPositon = document.getText(wordRangeAtPosition);
+    if (!wordAtPositon) {
+      return undefined;
+    }
+    if (!token.isIdentifier(wordAtPositon)) {
+      return;
+    }
+    if (iToken > 0) {
+      let tokenBefore = completionInfo.getTokenByIndex(iToken - 1);
+      // member definition is currently unsupported
+      if (tokenBefore.isPunctuator('.') || tokenBefore.isPunctuator(':')) {
+        return undefined;
+      }
+    }
+    // if we have found a matching identifier at position, we can find its definition
+    let identifierInfo: ScopedIdentifierInfo|undefined;
+    completionInfo.forEachLocalAtOffset(offset, (localIdentifierInfo: ScopedIdentifierInfo) => {
+      // (once it is found, ignore other identifiers from outer scope - most local scope is found first)
+      if (identifierInfo) {
+        return;
+      }
+      if (localIdentifierInfo.name === wordAtPositon) {
+        identifierInfo = localIdentifierInfo;
+      }
+    });
+
+    if (!identifierInfo || !identifierInfo.identifier) {
+      return undefined;
+    }
+    let def = new vscode.Location(document.uri, getParseNodeStartPosition(identifierInfo.identifier.loc));
+    return def;
   }
   
   provideHover(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken): vscode.ProviderResult<vscode.Hover> {
@@ -752,6 +816,12 @@ function isScriptFilenameParam(name: string) {
   // param name should have 'script' and 'file' or 'path' in it
   return name.match(/script/i) !== null && (name.match(/file/i) !== null || name.match(/path/i) !== null);
 
+}
+
+// Returns start position from parse node location.
+function getParseNodeStartPosition(loc: ParseNodeLocation) : vscode.Position {
+  // parse node indices are 1 based, while Position is 0 based!
+  return new vscode.Position(loc.startLine - 1, loc.startCol - 1);
 }
 
 // Called when extension is first activated.
