@@ -8,4 +8,5 @@
 - extract enum values
 - warnings for global variables inside world scripts
 - warnings for group variables and Event and such functions
+- warning if local variable in chunk hides the world script variable
 - autocomplete string literals using filesystem!
