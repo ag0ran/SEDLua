@@ -41,12 +41,15 @@ class SEDLua implements vscode.CompletionItemProvider {
     this.initWorkspace();
 
     // registering as completion provider
-    vscode.languages.registerCompletionItemProvider('lua', this, '.', ':', '\"', '\'');
+    context.subscriptions.push(
+      vscode.languages.registerCompletionItemProvider('lua', this, '.', ':', '\"', '\''));
 
     // registering as hover provider
-    vscode.languages.registerHoverProvider("lua", this);
+    context.subscriptions.push(
+      vscode.languages.registerHoverProvider("lua", this));
 
-    vscode.languages.registerSignatureHelpProvider("lua", this, "(");
+      context.subscriptions.push(
+        vscode.languages.registerSignatureHelpProvider("lua", this, "("));
 
     context.subscriptions.push(
       vscode.workspace.onDidCloseTextDocument(doc => this.diagnosticsCollection.delete(doc.uri))
