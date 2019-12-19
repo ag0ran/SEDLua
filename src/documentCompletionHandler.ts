@@ -26,10 +26,12 @@ interface FuncCallParamInfo {
 }
 
 export class DocumentCompletionInfo {
-  constructor (documentSofPath?: string) {
+  constructor (documentText: string, documentSofPath?: string) {
+    this.documentText = documentText;
     this.documentSoftPath = documentSofPath || "";
   }
   parseResults?: LuaParseResults;
+  documentText: string;
 
   variables: Map<string, VariableInfo> = new Map<string, VariableInfo>();
   functions: Set<string> = new Set<string>();
@@ -66,6 +68,54 @@ export class DocumentCompletionInfo {
     if (varInfos) {
       varInfos.forEach(callbackFunc);
     }
+  }
+  // Returns string showing the initialization of the identifier (including optional comment directly above).
+  getIdentifierDefinitionString(identifierInfo: ScopedIdentifierInfo): string|undefined {
+    let initParseNode = identifierInfo.initializeParseNode;
+    if (!initParseNode) {
+      return undefined;
+    }
+    let locInit = initParseNode.loc;
+    // it makes sense to include the token before the identifier in case of local statement or function declaration
+    let commentTokenBefore;
+    if (initParseNode.type === "FunctionDeclaration" || initParseNode.type === "LocalStatement") {
+      let iSearchToken = this.getTokenIndexAtOffset(locInit.rangeStart);
+      while (iSearchToken > 1) {
+        let searchToken = this.tokens[iSearchToken];
+        if (searchToken.endLine < locInit.startLine - 1) {
+          break;
+        }
+        if (searchToken.endLine === locInit.startLine - 1 && searchToken.type === LuaTokenType.Comment) {
+          commentTokenBefore = searchToken;
+          break;
+        }
+        iSearchToken--;
+      }
+    }
+    let defStart = locInit.rangeStart;
+    let defEnd = locInit.rangeEnd;
+    // for function declaration, we want to exclude the function body from the definition string
+    if (initParseNode.type === "FunctionDeclaration") {
+      let functionDeclaration = initParseNode as FunctionDeclaration;
+      if (functionDeclaration.body) {
+        // find the closing ) so it is the last character included in the declaration
+        let iSearchToken = this.getTokenIndexAtOffset(functionDeclaration.body.loc.rangeStart);
+        while (iSearchToken > 0) {
+          let searchToken = this.tokens[iSearchToken];
+          if (searchToken.isPunctuator(')')) {
+            defEnd = searchToken.rangeEnd;
+            break;
+          }
+          if (searchToken.rangeStart < defStart) {
+            break;
+          }
+          iSearchToken--;
+        }
+      }
+    }
+    let defString = commentTokenBefore ? commentTokenBefore.rawValue + "\n" : "";
+    defString += this.documentText.substring(defStart, defEnd);
+    return defString;
   }
   // Calls the provided callback for all local variables available in block at given offset.
   forEachLocalAtOffset(offset: number, callbackFunc: (identifierInfo: ScopedIdentifierInfo) => void) {
@@ -476,7 +526,7 @@ export class DocumentCompletionHandler {
   }
 
   private async parseDocument(documentText: string, documentSoftPath?: string) {
-    let result = new DocumentCompletionInfo(documentSoftPath);
+    let result = new DocumentCompletionInfo(documentText, documentSoftPath);
     function processTokens(tokens: Array<LuaToken>)
     {
       // if first token in a file is a comment, it may signal the hint mode for the script

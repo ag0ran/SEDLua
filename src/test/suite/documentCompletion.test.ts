@@ -81,7 +81,7 @@ async function testDocumentParsing() {
   }
 }
 
-class LocalsFinder {
+class LocalsNameFinder {
   locals = new Array<String>();
   forEachLocalCallback(identifierInfo: ScopedIdentifierInfo) {
     // identifiers masked by more local identifiers should be ignored
@@ -89,6 +89,19 @@ class LocalsFinder {
       this.locals.push(identifierInfo.name);
     }
   }
+}
+
+class LocalsFinder {
+  constructor(offset: number, completionInfo: DocumentCompletionInfo) {
+    let locals = this.locals;
+    function forEachLocalCallback(identifierInfo: ScopedIdentifierInfo) {
+      if (!locals.find((value) => value.name === identifierInfo.name)) {
+        locals.push(identifierInfo);
+      }
+    }
+    completionInfo.forEachLocalAtOffset(offset, forEachLocalCallback);
+  }
+  locals = new Array<ScopedIdentifierInfo>();
 }
 
 async function testGlobals() {
@@ -109,7 +122,7 @@ async function testGlobals() {
       {
         // right before locC
         let offset = textDocument.offsetAt(new vscode.Position(9, 0));
-        let localsFinder = new LocalsFinder();
+        let localsFinder = new LocalsNameFinder();
         completionInfo.forEachLocalAtOffset(offset, localsFinder.forEachLocalCallback.bind(localsFinder));
         assert(localsFinder.locals.length === 2);
         assert(localsFinder.locals[0] === "locA");
@@ -119,7 +132,7 @@ async function testGlobals() {
       {
         // right after locC
         let offset = textDocument.offsetAt(new vscode.Position(11, 0));
-        let localsFinder = new LocalsFinder();
+        let localsFinder = new LocalsNameFinder();
         completionInfo.forEachLocalAtOffset(offset, localsFinder.forEachLocalCallback.bind(localsFinder));
         assert(localsFinder.locals.length === 3);
         assert(localsFinder.locals[0] === "locA");
@@ -129,7 +142,7 @@ async function testGlobals() {
       {
         // at the start of newGlobal.func
         let offset = textDocument.offsetAt(new vscode.Position(13, 2));
-        let localsFinder = new LocalsFinder();
+        let localsFinder = new LocalsNameFinder();
         completionInfo.forEachLocalAtOffset(offset, localsFinder.forEachLocalCallback.bind(localsFinder));
         // 3 locals from outer scope + 3 locals from function parameters
         assert(localsFinder.locals.length === 3 + 3);
@@ -145,7 +158,7 @@ async function testGlobals() {
       {
         // at the end of newGlobal.func
         let offset = textDocument.offsetAt(new vscode.Position(16, 2));
-        let localsFinder = new LocalsFinder();
+        let localsFinder = new LocalsNameFinder();
         completionInfo.forEachLocalAtOffset(offset, localsFinder.forEachLocalCallback.bind(localsFinder));
         // 1 local from outer scope + 3 locals from function parameters + 2 locals masking ones from outer scope
         assert(localsFinder.locals.length === 1 + 3 + 2);
@@ -155,6 +168,21 @@ async function testGlobals() {
         assert(localsFinder.locals[3] === "locA");
         assert(localsFinder.locals[4] === "locB");
         assert(localsFinder.locals[5] === "locC");
+      }
+
+      // getting definition description string 
+      {
+        let offset = textDocument.offsetAt(new vscode.Position(27, 1));
+        let localsFinder = new LocalsFinder(offset, completionInfo);
+        assert(localsFinder.locals.length === 5);
+        let locFunctionIdentifierInfo = localsFinder.locals[3];
+        assert(locFunctionIdentifierInfo.name === "locFunction");
+        let locFunctionDefString = completionInfo.getIdentifierDefinitionString(locFunctionIdentifierInfo);
+        assert(locFunctionDefString === "-- this is a local function\nlocal function locFunction(a, b, c)");
+        let importantHolderIdentifierInfo = localsFinder.locals[4];
+        assert(importantHolderIdentifierInfo.name === "importantHolder");
+        let importantHolderDefString = completionInfo.getIdentifierDefinitionString(importantHolderIdentifierInfo);
+        assert(importantHolderDefString === "-- holds something important\nlocal importantHolder = globals.getImportantStuff()");
       }
     });
   } catch (err) {

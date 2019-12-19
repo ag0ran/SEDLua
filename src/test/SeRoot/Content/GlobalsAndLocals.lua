@@ -16,3 +16,13 @@ function newGlobal.func(p0, p1, p2)
   local locB = p0 + p1 + p2
   return locB + locA
 end
+
+-- this is a local function
+local function locFunction(a, b, c)
+  newGlobal.func(a, b, c)
+end
+
+-- holds something important
+local importantHolder = globals.getImportantStuff()
+
+locA = importantHolder;
