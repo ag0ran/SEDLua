@@ -656,20 +656,33 @@ class SEDLua implements vscode.CompletionItemProvider, vscode.DefinitionProvider
 
     let funcAndVarCompletionItems = new Array<vscode.CompletionItem>();
 
-
-    completionInfo.forEachVariable((variableInfo, variableName) => {
-      const varCompletionItem = new vscode.CompletionItem(variableName);
-      varCompletionItem.kind = vscode.CompletionItemKind.Variable;
-      if (variableInfo.type !== undefined) {
-        varCompletionItem.detail = variableInfo.type;
+    let foundLocals = new Set<string>();
+    // collect all locals available at current scope
+    completionInfo.forEachLocalAtOffset(currentOffset, (identifierInfo: ScopedIdentifierInfo) => {
+      // ignoring locals masked in the innermost scope
+      if (foundLocals.has(identifierInfo.name)) {
+        return;
       }
-      funcAndVarCompletionItems.push(varCompletionItem);
+      foundLocals.add(identifierInfo.name);
+      let completionItem = new vscode.CompletionItem(identifierInfo.name);
+      if (identifierInfo.initializeParseNode && identifierInfo.initializeParseNode.type === "FunctionDeclaration") {
+        completionItem.kind = vscode.CompletionItemKind.Function;
+      } else {
+        completionItem.kind = vscode.CompletionItemKind.Variable;
+      }
+      let defString = completionInfo!.getIdentifierDefinitionString(identifierInfo);
+      if (defString) {
+        completionItem.documentation = createLuaMarkdownWithComment(defString);
+      }
+      funcAndVarCompletionItems.push(completionItem);
     });
-    for (const func of completionInfo.functions) {
-      const funcCompletionItem = new vscode.CompletionItem(func);
-      funcCompletionItem.kind = vscode.CompletionItemKind.Function;
-      funcCompletionItem.documentation = "This is the " + func + " function. Documentation coming soon";
-      funcAndVarCompletionItems.push(funcCompletionItem);
+
+    // adding only global variable: globals
+    {
+      let completionItem = new vscode.CompletionItem("globals");
+      completionItem.kind = vscode.CompletionItemKind.Variable;
+      completionItem.documentation = "Globals table";
+      funcAndVarCompletionItems.push(completionItem);
     }
 
     // global lua completion
