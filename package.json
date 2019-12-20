@@ -5,6 +5,7 @@
   "version": "0.3.3",
   "publisher": "Croteam",
   "license": "MIT",
+  "icon": "resources/ExtensionIcon.png",
   "repository": {
     "type": "git",
     "url": "https://github.com/ag0ran/SEDLua"
