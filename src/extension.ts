@@ -684,6 +684,16 @@ class SEDLua implements vscode.CompletionItemProvider, vscode.DefinitionProvider
       completionItem.documentation = "Globals table";
       funcAndVarCompletionItems.push(completionItem);
     }
+    // adding world script vars
+    let mapVarInfos = worldScriptsStorage.getVarInfosForScript(completionInfo.documentSoftPath);
+    if (mapVarInfos) {
+      mapVarInfos.forEach((varInfo, varName) => {
+        let completionItem = new vscode.CompletionItem(varName);
+        completionItem.kind = vscode.CompletionItemKind.Variable;
+        completionItem.documentation = varInfo.type;
+        funcAndVarCompletionItems.push(completionItem);
+      });
+    }
 
     // global lua completion
     {
