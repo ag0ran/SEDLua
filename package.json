@@ -4,6 +4,7 @@
   "description": "SeriousEditor Lua",
   "version": "0.3.1",
   "publisher": "Croteam",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/ag0ran/SEDLua"
@@ -114,6 +115,7 @@
   "dependencies": {
     "@types/xml2js": "^0.4.5",
     "path": "^0.12.7",
+    "vsce": "^1.71.0",
     "xml2js": "^0.4.22"
   }
 }
