@@ -1,5 +1,6 @@
 import { LuaToken, LuaTokenType } from './luaLexer';
-import { parseLuaSource, LuaParseResults, ParseNode, Comment, MemberExpression, Identifier, ParseNodeVisitResult, visitParseNodes, CallExpression, FunctionDeclaration, ScopedIdentifierInfo, Block } from './luaParser';
+import { parseLuaSource, LuaParseResults, ParseNode, Comment, MemberExpression, Identifier,
+  ParseNodeVisitResult, visitParseNodes, CallExpression, FunctionDeclaration, ForNumericStatement, ForGenericStatement, ScopedIdentifierInfo, Block } from './luaParser';
 import * as vscode from 'vscode';
 import { helpCompletionInfo, MacroFuncCompletionInfo, CvarFunctionCompletionInfo, MacroClassCompletionInfo,
   LuaObjectCompletionInfo, LuaFunctionCompletionInfo, extractLuaParamByIndex, extractMacroParamByIndex } from './seHelp';
@@ -94,15 +95,15 @@ export class DocumentCompletionInfo {
     }
     let defStart = locInit.rangeStart;
     let defEnd = locInit.rangeEnd;
-    // for function declaration, we want to exclude the function body from the definition string
-    if (initParseNode.type === "FunctionDeclaration") {
-      let functionDeclaration = initParseNode as FunctionDeclaration;
-      if (functionDeclaration.body) {
-        // find the closing ) so it is the last character included in the declaration
-        let iSearchToken = this.getTokenIndexAtOffset(functionDeclaration.body.loc.rangeStart);
+    let completionInfo = this;
+    function updateDefEndBeforeBody(body: Block|undefined, tokenType: LuaTokenType, tokenRawValue: string) {
+      if (!body) {
+        return;
+      }
+      let iSearchToken = completionInfo.getTokenIndexAtOffset(body.loc.rangeStart);
         while (iSearchToken > 0) {
-          let searchToken = this.tokens[iSearchToken];
-          if (searchToken.isPunctuator(')')) {
+          let searchToken = completionInfo.tokens[iSearchToken];
+          if (searchToken.type === tokenType && searchToken.rawValue === tokenRawValue) {
             defEnd = searchToken.rangeEnd;
             break;
           }
@@ -111,7 +112,17 @@ export class DocumentCompletionInfo {
           }
           iSearchToken--;
         }
-      }
+    }
+    // for function declaration, we want to exclude the function body from the definition string
+    if (initParseNode.type === "FunctionDeclaration") {
+      let functionDeclaration = initParseNode as FunctionDeclaration;
+      updateDefEndBeforeBody(functionDeclaration.body, LuaTokenType.Punctuator, ")");
+    } else if (initParseNode.type === "ForNumericStatement") {
+      let forStatement = initParseNode as ForNumericStatement;
+      updateDefEndBeforeBody(forStatement.body, LuaTokenType.Keyword, "do");
+    } else if (initParseNode.type === "ForGenericStatement") {
+      let forStatement = initParseNode as ForGenericStatement;
+      updateDefEndBeforeBody(forStatement.body, LuaTokenType.Keyword, "do");
     }
     let defString = commentTokenBefore ? commentTokenBefore.rawValue + "\n" : "";
     defString += this.documentText.substring(defStart, defEnd);
