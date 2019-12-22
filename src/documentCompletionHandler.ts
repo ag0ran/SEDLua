@@ -1,6 +1,7 @@
 import { LuaToken, LuaTokenType } from './luaLexer';
 import { parseLuaSource, LuaParseResults, ParseNode, Comment, MemberExpression, Identifier,
-  ParseNodeVisitResult, visitParseNodes, CallExpression, FunctionDeclaration, ForNumericStatement, ForGenericStatement, ScopedIdentifierInfo, Block } from './luaParser';
+  ParseNodeVisitResult, visitParseNodes, CallExpression, FunctionDeclaration, ForNumericStatement,
+  ForGenericStatement, ScopedIdentifierInfo, Block, LocalStatement, Expression, ParseNodeLocation, ElseifClause } from './luaParser';
 import * as vscode from 'vscode';
 import { helpCompletionInfo, MacroFuncCompletionInfo, CvarFunctionCompletionInfo, MacroClassCompletionInfo,
   LuaObjectCompletionInfo, LuaFunctionCompletionInfo, extractLuaParamByIndex, extractMacroParamByIndex } from './seHelp';
@@ -62,6 +63,26 @@ export class DocumentCompletionInfo {
     }
     return varInfos.get(variableName);
   }
+
+  getLocalIdentifierInfoAtOffset(offset: number, name: string): ScopedIdentifierInfo|undefined {
+    let localIdentifierInfo: ScopedIdentifierInfo|undefined;
+    this.forEachLocalAtOffset(offset, (identifierInfo: ScopedIdentifierInfo) => {
+      if (!localIdentifierInfo && identifierInfo.name === name) {
+        localIdentifierInfo = identifierInfo;
+      }
+    });
+    return localIdentifierInfo;
+  }
+
+  getIdentifierType(identifierOffset: number, name: string): string|undefined {
+    let localIdentifierInfo = this.getLocalIdentifierInfoAtOffset(identifierOffset, name);
+    if (localIdentifierInfo) {
+      return localIdentifierInfo.type || "";
+    }
+    let varInfo = this.getVariableInfo(name);
+    return varInfo ? varInfo.type : undefined;
+  }
+
 
   forEachVariable(callbackFunc: (variableInfo: VariableInfo, variableName: string) => void) {
     this.variables.forEach(callbackFunc);
@@ -160,16 +181,7 @@ export class DocumentCompletionInfo {
   }
 
   getTokenIndexAtOffset(offset: number) : number {
-    for (let i = 0; i < this.tokens.length; i++) {
-      let token = this.tokens[i];
-      if (token.rangeStart <= offset && offset <= token.rangeEnd) {
-        return i;
-      }
-      if (token.rangeEnd >= offset) {
-        return i - 1;
-      }
-    }
-    return this.tokens.length - 1;
+    return getTokenIndexAtOffset(this.tokens, offset);
   }
   getTokenByIndex(tokenIndex: number) : LuaToken {
     return this.tokens[tokenIndex];
@@ -672,6 +684,7 @@ export class DocumentCompletionHandler {
       result.parseResults = parseResults;
       result.tokens = parseResults.tokens;
       processTokens(result.tokens);
+      processScopedIdentifiers(result);
 
       if (parseResults.errors !== undefined) {
         result.errors = [];
@@ -698,4 +711,170 @@ export function isMemberIndexingChar(char: string) {return char === '.' || char 
 
 export function isMemberIndexingToken(token: LuaToken) {
   return token.type === LuaTokenType.Punctuator && isMemberIndexingChar(token.rawValue);
+}
+
+function processScopedIdentifiers(completionInfo: DocumentCompletionInfo) {
+  let parseResults = completionInfo.parseResults!;
+  if (!parseResults.parsedChunk) {
+    return;
+  }
+
+  function checkHintedTypeAndResolveWithInitType(identifier: Identifier, initType?: string): string|undefined {
+     // check if identifier is followed by a comment token that contains a ":<Typename>"
+     let iToken = getTokenIndexAtOffset(parseResults.tokens, identifier.loc.rangeStart + 1);
+     let tokenAfter = parseResults.tokens[iToken + 1];
+     let hintedType: string|undefined;
+     function parsingErrorrRangeFromToken(token: LuaToken) {
+       return [token.startLine - 1, token.startCol - 1, token.endLine - 1, token.endCol - 1];
+     }
+     if (tokenAfter && tokenAfter.type === LuaTokenType.Comment) {
+       let matchResults = (tokenAfter.value as string).match(/^\s*: *(\w+)\s*$/);
+       if (matchResults && matchResults[1]) {
+         hintedType = matchResults[1];
+         // if init type is provided, it must match the hinted type
+         if (initType && initType !== hintedType) {
+           completionInfo.warnings = completionInfo.warnings || [];
+           completionInfo.warnings.push(new DocumentParsingError(parsingErrorrRangeFromToken(tokenAfter), `${identifier.name} is initialized as '${initType}' but hinted type is '${hintedType}'`));
+           hintedType = undefined;
+         } else if (!helpCompletionInfo.findMacroClassInfo(hintedType)) {
+           completionInfo.warnings = completionInfo.warnings || [];
+           completionInfo.warnings.push(new DocumentParsingError(parsingErrorrRangeFromToken(tokenAfter), `unrecognized type '${hintedType}'`));
+           hintedType = undefined;
+         }
+       }
+     }
+     return hintedType || initType;
+  }
+  // we will go through all scoped identifiers, caching their type
+  function goThroughBlockLocals(parseNode: ParseNode): ParseNodeVisitResult {
+    // we're interested in going through the block
+    if (parseNode.type === "Block") {
+      let block = parseNode as Block;
+      // now go through block's scope identifiers
+      for (let identifierInfo of block.scopeIdentifierInfos) {
+        if (!identifierInfo.identifier) {
+          continue;
+        }
+        let initType = resolveIdentifierTypeFromInitialization(identifierInfo, completionInfo);
+        identifierInfo.type = checkHintedTypeAndResolveWithInitType(identifierInfo.identifier, initType);
+      }
+    }
+    return ParseNodeVisitResult.Continue;
+  }
+  parseResults.parsedChunk.visitChildren(goThroughBlockLocals); 
+}
+
+function getTokenIndexAtOffset(tokens: Array<LuaToken>, offset: number): number {
+  for (let i = 0; i < tokens.length; i++) {
+    let token = tokens[i];
+    if (token.rangeStart <= offset && offset <= token.rangeEnd) {
+      return i;
+    }
+    if (token.rangeEnd >= offset) {
+      return i - 1;
+    }
+  }
+  return tokens.length - 1;
+}
+
+function resolveIdentifierTypeFromInitialization(identifierInfo: ScopedIdentifierInfo, completionInfo: DocumentCompletionInfo) {
+  if (!identifierInfo.initializeParseNode) {
+    return undefined;
+  }
+  if (identifierInfo.initializeParseNode instanceof LocalStatement) {
+    let localStatement = identifierInfo.initializeParseNode;
+    if (!localStatement.init) {
+      return undefined;
+    }
+    let identifierVarIndex = localStatement.variables.findIndex((value:ParseNode) => value === identifierInfo.identifier);
+    if (identifierVarIndex !== -1) {
+      let identifierInit = localStatement.init[identifierVarIndex];
+      if (!identifierInit) {
+        return undefined;
+      }
+      let expressionType = resolveExpressionType(identifierInit, completionInfo);
+      return expressionType;
+    }
+  }
+}
+
+function resolveExpressionType(expression: Expression, completionInfo: DocumentCompletionInfo) {
+  function resolveMemberExpressionRecursive(memberExpression: any):
+      VariableInfo|MacroFuncCompletionInfo|CvarFunctionCompletionInfo|MacroClassCompletionInfo|LuaObjectCompletionInfo|LuaFunctionCompletionInfo|string|undefined
+  {
+    if (memberExpression.type === "Identifier") {
+      let identifier = memberExpression as Identifier;
+      let varType = completionInfo.getIdentifierType(identifier.loc.rangeStart + 1, identifier.name);
+      if (varType !== undefined) {
+        return helpCompletionInfo.findMacroClassInfo(varType);
+      }
+      return helpCompletionInfo.findMacroFuncInfo(memberExpression.name)
+        || helpCompletionInfo.findCvarFuncInfo(memberExpression.name) || helpCompletionInfo.findLuaCompletionInfo(memberExpression.name);
+    } else if (memberExpression.type !== "MemberExpression") {
+      return undefined;
+    }
+    let baseExpressionValue = resolveMemberExpressionRecursive(memberExpression.base);
+    if (!baseExpressionValue) {
+      return undefined;
+    }
+    if (baseExpressionValue instanceof MacroClassCompletionInfo) {
+      if (memberExpression.indexer === ".") {
+        return helpCompletionInfo.findMacroClassEvent(baseExpressionValue, memberExpression.identifier.name);
+      } else if (memberExpression.indexer === ":") {
+        return helpCompletionInfo.findMacroClassFunction(baseExpressionValue, memberExpression.identifier.name);
+      } else {
+        return undefined;
+      }
+    } else if (baseExpressionValue instanceof LuaObjectCompletionInfo) {
+      return baseExpressionValue.findCompletionInfoByName(memberExpression.identifier.name);
+    } else {
+      return undefined;
+    }
+  }
+
+  function resolveType(inType: VariableInfo|MacroFuncCompletionInfo|CvarFunctionCompletionInfo|MacroClassCompletionInfo|LuaObjectCompletionInfo|LuaFunctionCompletionInfo|string|undefined): string|undefined
+  {
+    function extractCppType(cppType: string) {
+      {
+        let matched = cppType.match(/\s*void\s*/);
+        if (matched) {
+          return undefined;
+        }
+      }
+      {
+        let matched = cppType.match(/Handle<\s*(\w+)\s*>/);
+        if (matched) {
+          return matched[1];
+        }
+      }
+      {
+        let matched = cppType.match(/\s*(\w+)\s*\*/);
+        if (matched) {
+          return matched[1];
+        }
+      }
+      return undefined;
+    }
+    if (inType instanceof VariableInfo) {
+      return inType.type;
+    } else if (inType instanceof MacroFuncCompletionInfo) {
+      return extractCppType(inType.returnType);
+    } else if (inType instanceof CvarFunctionCompletionInfo) {
+      return extractCppType(inType.returnType);
+    } else if (inType instanceof MacroClassCompletionInfo) {
+      return inType.name;
+    } else if (inType instanceof LuaObjectCompletionInfo) {
+      return undefined;
+    } else if (inType instanceof LuaFunctionCompletionInfo) {
+      return undefined;
+    } else {
+      return inType;
+    }
+  }
+
+  if (expression instanceof CallExpression) {
+    let callExpression = expression;
+    return resolveType(resolveMemberExpressionRecursive(callExpression.base));
+  }
+  return undefined;
 }

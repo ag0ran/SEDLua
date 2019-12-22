@@ -793,6 +793,7 @@ export class ScopedIdentifierInfo {
   // Node at which identifier is initialized
   initializeParseNode?: ParseNode;
   description?: string;
+  type?: string;
 }
 
 export interface LuaParseResults {

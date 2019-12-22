@@ -254,12 +254,7 @@ class SEDLua implements vscode.CompletionItemProvider, vscode.DefinitionProvider
       let tokenAtOffset = completionInfo.getTokenByIndex(iTokenAtOffset);
       if (tokenAtOffset.isIdentifier()) {
         // try to find a matching local var
-        let localIdentifierInfo: ScopedIdentifierInfo|undefined;
-        completionInfo.forEachLocalAtOffset(offset, (identifierInfo: ScopedIdentifierInfo) => {
-          if (!localIdentifierInfo && identifierInfo.name === tokenAtOffset.rawValue) {
-            localIdentifierInfo = identifierInfo;
-          }
-        });
+        let localIdentifierInfo = completionInfo.getLocalIdentifierInfoAtOffset(offset, tokenAtOffset.rawValue);
         if (localIdentifierInfo) {
           let defString = completionInfo.getIdentifierDefinitionString(localIdentifierInfo);
           if (defString) {
@@ -592,13 +587,13 @@ class SEDLua implements vscode.CompletionItemProvider, vscode.DefinitionProvider
 
         if (indexedVarToken && indexedVarToken.type === LuaTokenType.Identifier) {
           let classCompletionItems = new Array<vscode.CompletionItem>();
-          let varInfo = completionInfo.getVariableInfo(indexedVarToken.rawValue);
+          let varType = completionInfo.getIdentifierType(indexedVarToken.rangeStart + 1, indexedVarToken.rawValue);
           // if variable info is available
-          if (varInfo) {
+          if (varType !== undefined) {
             // if valid type is hinted
-            if (varInfo.type) {
+            if (varType !== "") {
               // trying to index a macro class
-              let macroClassInfo = helpCompletionInfo.findMacroClassInfo(varInfo.type);
+              let macroClassInfo = helpCompletionInfo.findMacroClassInfo(varType);
               if (macroClassInfo) {
                 if (indexingChar === ":") {
                   helpCompletionInfo.forEachMacroClassFunction(macroClassInfo, (funcInfo) => {

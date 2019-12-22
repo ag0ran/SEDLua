@@ -101,6 +101,9 @@ class LocalsFinder {
     }
     completionInfo.forEachLocalAtOffset(offset, forEachLocalCallback);
   }
+  getIdentifierInfo(name: string): ScopedIdentifierInfo|undefined {
+    return this.locals.find((value) => value.name === name);
+  }
   locals = new Array<ScopedIdentifierInfo>();
 }
 
@@ -190,6 +193,44 @@ async function testGlobals() {
   }
 }
 
+async function testScopedTypes()
+{
+  test('Scoped types', async function() {
+    try {
+      let sampleScriptUri = softPathToUri("Content/VarTypes.lua");
+      let textDocument = await vscode.workspace.openTextDocument(sampleScriptUri);  
+      assert(textDocument, "Unable to open document");
+      let documentCompletionHandler = new DocumentCompletionHandler(textDocument);
+      let completionInfo = documentCompletionHandler.getCompletionInfoNow();
+      assert(completionInfo, "Error getting completion info");
+      completionInfo = completionInfo!;
+      assert(completionInfo.parseResults);
+      let parseResults = completionInfo.parseResults!;
+      // get var types
+      {
+        let offset = textDocument.offsetAt(new vscode.Position(3, 1));
+        let localsFinder = new LocalsFinder(offset, completionInfo);
+        {
+          let param0Info = localsFinder.getIdentifierInfo("param0");
+          assert(param0Info !== undefined);
+          param0Info = param0Info!;
+          assert(param0Info.identifier !== undefined);
+          assert(param0Info.type === "CDerivedSampleClass");
+        }
+        {
+          let subObjectInfo = localsFinder.getIdentifierInfo("subObject");
+          assert(subObjectInfo !== undefined);
+          subObjectInfo = subObjectInfo!;
+          assert(subObjectInfo.identifier !== undefined);
+          assert(subObjectInfo.type === "CDerivedSampleClass");
+        }
+      }
+    } catch (err) {
+      assert(false, "Tests failed due to error: " + err.message);
+    }
+  });
+}
+
 async function testWorldScriptsParsing() {
   test('World scripts parsing', async function() {
     try {
@@ -209,4 +250,5 @@ suite('Document completion', async () => {
   await testDocumentParsing();
   await testWorldScriptsParsing();
   await testGlobals();
+  await testScopedTypes();
 });
