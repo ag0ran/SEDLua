@@ -719,7 +719,7 @@ function processScopedIdentifiers(completionInfo: DocumentCompletionInfo) {
     return;
   }
 
-  function checkHintedTypeAndResolveWithInitType(identifier: Identifier, initType?: string): string|undefined {
+  function getHintedType(identifier: Identifier): string|undefined {
      // check if identifier is followed by a comment token that contains a ":<Typename>"
      let iToken = getTokenIndexAtOffset(parseResults.tokens, identifier.loc.rangeStart + 1);
      let tokenAfter = parseResults.tokens[iToken + 1];
@@ -731,19 +731,13 @@ function processScopedIdentifiers(completionInfo: DocumentCompletionInfo) {
        let matchResults = (tokenAfter.value as string).match(/^\s*: *(\w+)\s*$/);
        if (matchResults && matchResults[1]) {
          hintedType = matchResults[1];
-         // if init type is provided, it must match the hinted type
-         if (initType && initType !== hintedType) {
-           completionInfo.warnings = completionInfo.warnings || [];
-           completionInfo.warnings.push(new DocumentParsingError(parsingErrorrRangeFromToken(tokenAfter), `${identifier.name} is initialized as '${initType}' but hinted type is '${hintedType}'`));
-           hintedType = undefined;
-         } else if (!helpCompletionInfo.findMacroClassInfo(hintedType)) {
+         if (!helpCompletionInfo.findMacroClassInfo(hintedType)) {
            completionInfo.warnings = completionInfo.warnings || [];
            completionInfo.warnings.push(new DocumentParsingError(parsingErrorrRangeFromToken(tokenAfter), `unrecognized type '${hintedType}'`));
-           hintedType = undefined;
          }
        }
      }
-     return hintedType || initType;
+     return hintedType;
   }
   // we will go through all scoped identifiers, caching their type
   function goThroughBlockLocals(parseNode: ParseNode): ParseNodeVisitResult {
@@ -755,8 +749,7 @@ function processScopedIdentifiers(completionInfo: DocumentCompletionInfo) {
         if (!identifierInfo.identifier) {
           continue;
         }
-        let initType = resolveIdentifierTypeFromInitialization(identifierInfo, completionInfo);
-        identifierInfo.type = checkHintedTypeAndResolveWithInitType(identifierInfo.identifier, initType);
+        identifierInfo.type = getHintedType(identifierInfo.identifier) || resolveIdentifierTypeFromInitialization(identifierInfo, completionInfo);;
       }
     }
     return ParseNodeVisitResult.Continue;
