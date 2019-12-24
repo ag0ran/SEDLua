@@ -749,7 +749,7 @@ function processScopedIdentifiers(completionInfo: DocumentCompletionInfo) {
         if (!identifierInfo.identifier) {
           continue;
         }
-        identifierInfo.type = getHintedType(identifierInfo.identifier) || resolveIdentifierTypeFromInitialization(identifierInfo, completionInfo);;
+        identifierInfo.type = getHintedType(identifierInfo.identifier) || resolveIdentifierTypeFromInitialization(identifierInfo, completionInfo);
       }
     }
     return ParseNodeVisitResult.Continue;

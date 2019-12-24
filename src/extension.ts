@@ -522,7 +522,11 @@ class SEDLua implements vscode.CompletionItemProvider, vscode.DefinitionProvider
     // match the type hint start in the current line up to current position (the last one up to current position)
     let typeHintMatch = currentLineUpToPosition.match(/\w+\s*:\s*/g);
     if (!typeHintMatch) {
-      return undefined;
+      let commentValue = commentToken.value as string;
+      typeHintMatch = commentValue.match(/^\s*:\s*$/);
+      if (!typeHintMatch) {
+        return undefined;
+      }
     }
     let lastMatchString = typeHintMatch[typeHintMatch.length - 1];
     let lastHintStart = currentLineUpToPosition.lastIndexOf(lastMatchString);
