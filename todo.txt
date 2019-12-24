@@ -16,3 +16,4 @@
 - warnings for group variables and Event and such functions
 - warning if local variable in chunk hides the world script variable
 - autocomplete string literals using filesystem!
+- error when assigning a macro function to a variable, global or function parameter!
