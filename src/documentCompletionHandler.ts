@@ -10,10 +10,10 @@ import * as seFilesystem from './sefilesystem';
 
 
 export class VariableInfo {
-  constructor(varType?: string) {
+  constructor(varType: string) {
     this.type = varType;
   }
-  type: string|undefined;
+  type: string;
 }
 
 export class ParseInfo {
@@ -35,8 +35,8 @@ export class DocumentCompletionInfo {
   parseResults?: LuaParseResults;
   documentText: string;
 
-  variables: Map<string, VariableInfo> = new Map<string, VariableInfo>();
-  functions: Set<string> = new Set<string>();
+  // Variables hinted the old way (before scope information). Should become obsolete some day.
+  hintedVariables: Map<string, VariableInfo> = new Map<string, VariableInfo>();
   tokens: Array<LuaToken> = [];
   error: DocumentParsingError|undefined;
   errors: Array<DocumentParsingError>|undefined;
@@ -45,15 +45,8 @@ export class DocumentCompletionInfo {
   cvarHintMode = true;
   macroHintMode = true;
 
-  getVariableInfoForToken(token: LuaToken): VariableInfo|undefined {
-    if (token.type !== LuaTokenType.Identifier) {
-      return undefined;
-    }
-    return this.getVariableInfo(token.rawValue);
-  }
-
-  getVariableInfo(variableName: string): VariableInfo|undefined {
-    let variableInfo = this.variables.get(variableName);
+  private getVariableInfo(variableName: string): VariableInfo|undefined {
+    let variableInfo = this.hintedVariables.get(variableName);
     if (variableInfo && variableInfo.type) {
       return variableInfo;
     }
@@ -85,7 +78,7 @@ export class DocumentCompletionInfo {
 
 
   forEachVariable(callbackFunc: (variableInfo: VariableInfo, variableName: string) => void) {
-    this.variables.forEach(callbackFunc);
+    this.hintedVariables.forEach(callbackFunc);
     let varInfos = worldScriptsStorage.getVarInfosForScript(this.documentSoftPath);
     if (varInfos) {
       varInfos.forEach(callbackFunc);
@@ -615,7 +608,7 @@ export class DocumentCompletionHandler {
             let varName: string = commentMatch[1];
             let varType: string = commentMatch[2];
             if (helpCompletionInfo.findMacroClassInfo(varType)) {
-              result.variables.set(varName, new VariableInfo(varType));
+              result.hintedVariables.set(varName, new VariableInfo(varType));
             } else {
               if (!result.warnings) {
                 result.warnings = [];
@@ -634,53 +627,8 @@ export class DocumentCompletionHandler {
         }
       }
     }
-
-    function onCreateNodeCallback(node: ParseNode) {
-      switch (node.type) {
-        case "Identifier":
-          let identifier = node as Identifier;
-          let varName: string = identifier.name;
-          if (!result.variables.get(varName)) {
-            result.variables.set(varName, new VariableInfo());
-          }
-          break;
-        case "CallExpression":
-          let callExpression = node as CallExpression;
-          let funcName;
-
-          if (callExpression.base) {
-            if (callExpression.base.type === "MemberExpression") {
-              let baseMemberExpression = callExpression.base as MemberExpression;
-              funcName = baseMemberExpression.identifier.name;
-            } else if (callExpression.base.type === "Identifier") {
-              let baseIdentifier = callExpression.base as Identifier;
-              funcName = baseIdentifier.name;
-            }
-          }
-          if (funcName) {
-            result.functions.add(funcName);
-          }
-          break;
-        case "FunctionDeclaration":
-          let funcDecl = node as FunctionDeclaration;
-          if (funcDecl.identifier && funcDecl.identifier.type === "Identifier") {
-            let funcIdentifier = funcDecl.identifier as Identifier;
-            let nodeIdentifier = funcIdentifier.name;
-            result.functions.add(nodeIdentifier);
-          }
-          break;
-      }
-    }
-    let parseOptions = {
-      wait: false,
-      scope: true,
-      locations: true,
-      ranges: true,
-      errorsNotExceptions: true,
-      onCreateNode: onCreateNodeCallback
-    };
     try {
-      let parseResults = parseLuaSource(documentText, onCreateNodeCallback);
+      let parseResults = parseLuaSource(documentText);
       result.parseResults = parseResults;
       result.tokens = parseResults.tokens;
       processTokens(result.tokens);
@@ -697,10 +645,6 @@ export class DocumentCompletionHandler {
         result.errors = [];
       }
       result.errors.push(new DocumentParsingError([0, 0, 0, 0], `Unexpected lua parsing error: ${err.message}`));
-    }
-    // don't let functions be specified in variables
-    for (const func of result.functions) {
-      result.variables.delete(func);
     }
     this.currentCompletionInfo = result;
   }
