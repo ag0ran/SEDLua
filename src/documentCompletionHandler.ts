@@ -377,9 +377,10 @@ export class DocumentCompletionInfo {
       VariableInfo|MacroFuncCompletionInfo|CvarFunctionCompletionInfo|MacroClassCompletionInfo|LuaObjectCompletionInfo|LuaFunctionCompletionInfo|string|undefined
     {
       if (memberExpression.type === "Identifier") {
-        let variableInfo = documentCompletionInfo.getVariableInfo(memberExpression.name);
-        if (variableInfo) {
-          return variableInfo.type ? helpCompletionInfo.findMacroClassInfo(variableInfo.type) : undefined;
+        let identifier: Identifier = memberExpression as Identifier;
+        let identifierType = documentCompletionInfo.getIdentifierType(identifier.loc.rangeStart + 1, identifier.name);
+        if (identifierType !== undefined) {
+          return identifierType !== "" ? helpCompletionInfo.findMacroClassInfo(identifierType) : undefined;
         }
         return helpCompletionInfo.findMacroFuncInfo(memberExpression.name)
           || helpCompletionInfo.findCvarFuncInfo(memberExpression.name) || helpCompletionInfo.findLuaCompletionInfo(memberExpression.name);
