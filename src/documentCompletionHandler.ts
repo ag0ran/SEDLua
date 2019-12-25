@@ -333,6 +333,40 @@ export class DocumentCompletionInfo {
     }
   }
 
+  resolveMemberExpressionRecursive(memberExpressionOrIdentifier: ParseNode|undefined):
+    VariableInfo | MacroFuncCompletionInfo | CvarFunctionCompletionInfo | MacroClassCompletionInfo | LuaObjectCompletionInfo | LuaFunctionCompletionInfo | string | undefined
+  {
+    if (memberExpressionOrIdentifier instanceof Identifier) {
+      let identifier: Identifier = memberExpressionOrIdentifier;
+      let identifierType = this.getIdentifierType(identifier.loc.rangeStart + 1, identifier.name);
+      if (identifierType !== undefined) {
+        return identifierType !== "" ? helpCompletionInfo.findMacroClassInfo(identifierType) : undefined;
+      }
+      return helpCompletionInfo.findMacroFuncInfo(identifier.name)
+        || helpCompletionInfo.findCvarFuncInfo(identifier.name) || helpCompletionInfo.findLuaCompletionInfo(identifier.name);
+    } else if (!(memberExpressionOrIdentifier instanceof MemberExpression)) {
+      return undefined;
+    }
+    let memberExpression: MemberExpression = memberExpressionOrIdentifier;
+    let baseExpressionValue = this.resolveMemberExpressionRecursive(memberExpression.base);
+    if (!baseExpressionValue) {
+      return undefined;
+    }
+    if (baseExpressionValue instanceof MacroClassCompletionInfo) {
+      if (memberExpressionOrIdentifier.indexer === ".") {
+        return helpCompletionInfo.findMacroClassEvent(baseExpressionValue, memberExpressionOrIdentifier.identifier.name);
+      } else if (memberExpressionOrIdentifier.indexer === ":") {
+        return helpCompletionInfo.findMacroClassFunction(baseExpressionValue, memberExpressionOrIdentifier.identifier.name);
+      } else {
+        return undefined;
+      }
+    } else if (baseExpressionValue instanceof LuaObjectCompletionInfo) {
+      return baseExpressionValue.findCompletionInfoByName(memberExpressionOrIdentifier.identifier.name);
+    } else {
+      return undefined;
+    }
+  }
+
   resolveMemberExpressionAtOffset(offset: number):
   VariableInfo|MacroFuncCompletionInfo|CvarFunctionCompletionInfo|MacroClassCompletionInfo|LuaObjectCompletionInfo|LuaFunctionCompletionInfo|string|undefined
   {
@@ -379,41 +413,8 @@ export class DocumentCompletionInfo {
     this.parseResults.parsedChunk.visitChildren(findIdentifierOrMemberExpressionVisitor);
     let documentCompletionInfo = this;
 
-    function resolveMemberExpressionRecursive(memberExpression: any):
-      VariableInfo|MacroFuncCompletionInfo|CvarFunctionCompletionInfo|MacroClassCompletionInfo|LuaObjectCompletionInfo|LuaFunctionCompletionInfo|string|undefined
-    {
-      if (memberExpression.type === "Identifier") {
-        let identifier: Identifier = memberExpression as Identifier;
-        let identifierType = documentCompletionInfo.getIdentifierType(identifier.loc.rangeStart + 1, identifier.name);
-        if (identifierType !== undefined) {
-          return identifierType !== "" ? helpCompletionInfo.findMacroClassInfo(identifierType) : undefined;
-        }
-        return helpCompletionInfo.findMacroFuncInfo(memberExpression.name)
-          || helpCompletionInfo.findCvarFuncInfo(memberExpression.name) || helpCompletionInfo.findLuaCompletionInfo(memberExpression.name);
-      } else if (memberExpression.type !== "MemberExpression") {
-        return undefined;
-      }
-      let baseExpressionValue = resolveMemberExpressionRecursive(memberExpression.base);
-      if (!baseExpressionValue) {
-        return undefined;
-      }
-      if (baseExpressionValue instanceof MacroClassCompletionInfo) {
-        if (memberExpression.indexer === ".") {
-          return helpCompletionInfo.findMacroClassEvent(baseExpressionValue, memberExpression.identifier.name);
-        } else if (memberExpression.indexer === ":") {
-          return helpCompletionInfo.findMacroClassFunction(baseExpressionValue, memberExpression.identifier.name);
-        } else {
-          return undefined;
-        }
-      } else if (baseExpressionValue instanceof LuaObjectCompletionInfo) {
-        return baseExpressionValue.findCompletionInfoByName(memberExpression.identifier.name);
-      } else {
-        return undefined;
-      }
-    }
-
     if (identifierOrMemberExpression) {
-      return resolveMemberExpressionRecursive(identifierOrMemberExpression);
+      return this.resolveMemberExpressionRecursive(identifierOrMemberExpression);
     }
 
     return undefined;
@@ -743,39 +744,6 @@ function resolveIdentifierTypeFromInitialization(identifierInfo: ScopedIdentifie
 }
 
 function resolveExpressionType(expression: Expression, completionInfo: DocumentCompletionInfo) {
-  function resolveMemberExpressionRecursive(memberExpression: any):
-      VariableInfo|MacroFuncCompletionInfo|CvarFunctionCompletionInfo|MacroClassCompletionInfo|LuaObjectCompletionInfo|LuaFunctionCompletionInfo|string|undefined
-  {
-    if (memberExpression.type === "Identifier") {
-      let identifier = memberExpression as Identifier;
-      let varType = completionInfo.getIdentifierType(identifier.loc.rangeStart + 1, identifier.name);
-      if (varType !== undefined) {
-        return helpCompletionInfo.findMacroClassInfo(varType);
-      }
-      return helpCompletionInfo.findMacroFuncInfo(memberExpression.name)
-        || helpCompletionInfo.findCvarFuncInfo(memberExpression.name) || helpCompletionInfo.findLuaCompletionInfo(memberExpression.name);
-    } else if (memberExpression.type !== "MemberExpression") {
-      return undefined;
-    }
-    let baseExpressionValue = resolveMemberExpressionRecursive(memberExpression.base);
-    if (!baseExpressionValue) {
-      return undefined;
-    }
-    if (baseExpressionValue instanceof MacroClassCompletionInfo) {
-      if (memberExpression.indexer === ".") {
-        return helpCompletionInfo.findMacroClassEvent(baseExpressionValue, memberExpression.identifier.name);
-      } else if (memberExpression.indexer === ":") {
-        return helpCompletionInfo.findMacroClassFunction(baseExpressionValue, memberExpression.identifier.name);
-      } else {
-        return undefined;
-      }
-    } else if (baseExpressionValue instanceof LuaObjectCompletionInfo) {
-      return baseExpressionValue.findCompletionInfoByName(memberExpression.identifier.name);
-    } else {
-      return undefined;
-    }
-  }
-
   function resolveType(inType: VariableInfo|MacroFuncCompletionInfo|CvarFunctionCompletionInfo|MacroClassCompletionInfo|LuaObjectCompletionInfo|LuaFunctionCompletionInfo|string|undefined): string|undefined
   {
     function extractCppType(cppType: string) {
@@ -818,7 +786,7 @@ function resolveExpressionType(expression: Expression, completionInfo: DocumentC
 
   if (expression instanceof CallExpression) {
     let callExpression = expression;
-    return resolveType(resolveMemberExpressionRecursive(callExpression.base));
+    return resolveType(completionInfo.resolveMemberExpressionRecursive(callExpression.base));
   }
   return undefined;
 }
