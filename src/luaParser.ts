@@ -794,6 +794,7 @@ export class ScopedIdentifierInfo {
   initializeParseNode?: ParseNode;
   description?: string;
   type?: string;
+  typeHinted?: boolean;
 }
 
 export interface LuaParseResults {

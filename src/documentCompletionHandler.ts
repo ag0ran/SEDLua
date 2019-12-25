@@ -71,6 +71,15 @@ export class DocumentCompletionInfo {
   getIdentifierType(identifierOffset: number, name: string): string|undefined {
     let localIdentifierInfo = this.getLocalIdentifierInfoAtOffset(identifierOffset, name);
     if (localIdentifierInfo) {
+      // hinted type on local identifier has precendence over globally hinted variable type
+      if (localIdentifierInfo.typeHinted) {
+        return localIdentifierInfo.type;
+      }
+      // hinted var info has precendence over init type (as we need to support this obsolete way of type hinting for the sake of older scripts)
+      let hintedVarInfo = this.hintedVariables.get(name);
+      if (hintedVarInfo && hintedVarInfo.type) {
+        return hintedVarInfo.type;
+      }
       return localIdentifierInfo.type || "";
     }
     let varInfo = this.getVariableInfo(name);
@@ -702,7 +711,12 @@ function processScopedIdentifiers(completionInfo: DocumentCompletionInfo) {
         if (!identifierInfo.identifier) {
           continue;
         }
-        identifierInfo.type = getHintedType(identifierInfo.identifier) || resolveIdentifierTypeFromInitialization(identifierInfo, completionInfo);
+        identifierInfo.type = getHintedType(identifierInfo.identifier);
+        if (identifierInfo.type) {
+          identifierInfo.typeHinted = true;
+        } else {
+          identifierInfo.type = resolveIdentifierTypeFromInitialization(identifierInfo, completionInfo);
+        }
       }
     }
     return ParseNodeVisitResult.Continue;
