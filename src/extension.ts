@@ -256,9 +256,16 @@ class SEDLua implements vscode.CompletionItemProvider, vscode.DefinitionProvider
         // try to find a matching local var
         let localIdentifierInfo = completionInfo.getLocalIdentifierInfoAtOffset(offset, tokenAtOffset.rawValue);
         if (localIdentifierInfo) {
+          let identifierMarkdown = new Array<vscode.MarkdownString>();
+          if (localIdentifierInfo.type) {
+            identifierMarkdown.push(createLuaMarkdownWithComment(`local ${localIdentifierInfo.name} : ${localIdentifierInfo.type}`));
+          }
           let defString = completionInfo.getIdentifierDefinitionString(localIdentifierInfo);
           if (defString) {
-            hover = new vscode.Hover(createLuaMarkdownWithComment(defString));
+            identifierMarkdown.push(createLuaMarkdownWithComment(defString));
+          }
+          if (identifierMarkdown.length > 0) {
+            hover = new vscode.Hover(identifierMarkdown);
           }
         }
       }

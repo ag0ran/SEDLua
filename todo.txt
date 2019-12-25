@@ -1,6 +1,7 @@
 - coloring of comments (they don't work when inside function declaration for some reason)
 - coloring of type comments
 - hints for built in types (Vector3f, QuatVect...)
+- check function calls for missing parameters!
 - allow different hinted types
 - type hints in comments after identifier
 - local functions should be added to autocomplete
