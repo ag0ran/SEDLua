@@ -232,26 +232,23 @@ class SEDLua implements vscode.CompletionItemProvider, vscode.DefinitionProvider
     if (iTokenAtOffset === -1) {
       return undefined;
     }
-    let lastInfo = completionInfo.resolveMemberExpressionAtOffset(offset);
+    let expressionInfo = completionInfo.resolveMemberExpressionAtOffset(offset);
 
     let hover: vscode.Hover|undefined;
-    if (lastInfo instanceof MacroClassCompletionInfo) {
-      hover = new vscode.Hover(`${word} : ${lastInfo.name}`);
-    } else if (lastInfo instanceof MacroFuncCompletionInfo) {
-      hover = new vscode.Hover(createCppMarkdownWithComment(getMacroFuncSignatureString(lastInfo),
-        lastInfo.briefComment || lastInfo.detailComment));
-    } else if (typeof(lastInfo) === "string") {
-      hover = new vscode.Hover(lastInfo);
-      return hover;
-    } else if (lastInfo instanceof CvarFunctionCompletionInfo) {
-      hover = new vscode.Hover(createCppMarkdownWithComment(getCvarFuncSignatureString(lastInfo),
-        lastInfo.briefComment || lastInfo.detailComment));
-    } else if (lastInfo instanceof LuaFunctionCompletionInfo) {
-      hover = new vscode.Hover(createLuaMarkdownWithComment(getLuaFuncSignatureString(lastInfo), lastInfo.desc));
-    } else if (lastInfo instanceof LuaObjectCompletionInfo) {
-      hover = new vscode.Hover(createLuaMarkdownWithComment(getLuaObjectDescriptionString(lastInfo), lastInfo.desc));
-    } else if (lastInfo instanceof MacroClassEvent) {
-      hover = new vscode.Hover(new vscode.MarkdownString(`(event) ${lastInfo.macroClass}.${lastInfo.name}`));
+    if (expressionInfo instanceof MacroClassCompletionInfo) {
+      hover = new vscode.Hover(`${word} : ${expressionInfo.name}`);
+    } else if (expressionInfo instanceof MacroFuncCompletionInfo) {
+      hover = new vscode.Hover(createCppMarkdownWithComment(getMacroFuncSignatureString(expressionInfo),
+        expressionInfo.briefComment || expressionInfo.detailComment));
+    } else if (expressionInfo instanceof CvarFunctionCompletionInfo) {
+      hover = new vscode.Hover(createCppMarkdownWithComment(getCvarFuncSignatureString(expressionInfo),
+        expressionInfo.briefComment || expressionInfo.detailComment));
+    } else if (expressionInfo instanceof LuaFunctionCompletionInfo) {
+      hover = new vscode.Hover(createLuaMarkdownWithComment(getLuaFuncSignatureString(expressionInfo), expressionInfo.desc));
+    } else if (expressionInfo instanceof LuaObjectCompletionInfo) {
+      hover = new vscode.Hover(createLuaMarkdownWithComment(getLuaObjectDescriptionString(expressionInfo), expressionInfo.desc));
+    } else if (expressionInfo instanceof MacroClassEvent) {
+      hover = new vscode.Hover(new vscode.MarkdownString(`(event) ${expressionInfo.macroClass}.${expressionInfo.name}`));
     } else {
       let tokenAtOffset = completionInfo.getTokenByIndex(iTokenAtOffset);
       if (tokenAtOffset.isIdentifier()) {
