@@ -50,6 +50,15 @@ export class MacroClassCompletionInfo {
   briefComment: string = "";
 }
 
+export class MacroClassEvent {
+  constructor(name: string, macroClass: string) {
+    this.name = name;
+    this.macroClass = macroClass;
+  }
+  name: string;
+  macroClass: string;
+}
+
 export class LuaObjectCompletionInfo {
   name: string = "";
   desc: string = "";
@@ -192,13 +201,13 @@ export class HelpCompletionInfo {
     }
   }
 
-  findMacroClassEvent(classInfo: MacroClassCompletionInfo|undefined, eventName: string): string|undefined {
+  findMacroClassEvent(classInfo: MacroClassCompletionInfo|undefined, eventName: string): MacroClassEvent|undefined {
     if (!classInfo) {
       return;
     }
     for (let event of classInfo.events) {
       if (event === eventName) {
-        return event;
+        return new MacroClassEvent(event, classInfo.name);
       }
     }
     if (classInfo.baseClass !== "") {

@@ -5,7 +5,7 @@ import * as path from 'path';
 import * as seFilesystem from './sefilesystem';
 import {DocumentCompletionHandler, DocumentCompletionInfo, isMemberIndexingToken, isMemberIndexingChar} from './documentCompletionHandler';
 import {helpCompletionInfo, loadHelpCompletionInfo, HelpCompletionInfo, MacroFuncCompletionInfo, CvarFunctionCompletionInfo,
-  CvarCompletionInfo, MacroClassCompletionInfo, LuaFunctionCompletionInfo, LuaObjectCompletionInfo, extractLuaParamByIndex, extractMacroParamByIndex} from './seHelp';
+  CvarCompletionInfo, MacroClassCompletionInfo, LuaFunctionCompletionInfo, LuaObjectCompletionInfo, extractLuaParamByIndex, extractMacroParamByIndex, MacroClassEvent} from './seHelp';
 import {log} from "./log";
 import fs = require('fs');
 import { performance } from 'perf_hooks';
@@ -250,6 +250,8 @@ class SEDLua implements vscode.CompletionItemProvider, vscode.DefinitionProvider
       hover = new vscode.Hover(createLuaMarkdownWithComment(getLuaFuncSignatureString(lastInfo), lastInfo.desc));
     } else if (lastInfo instanceof LuaObjectCompletionInfo) {
       hover = new vscode.Hover(createLuaMarkdownWithComment(getLuaObjectDescriptionString(lastInfo), lastInfo.desc));
+    } else if (lastInfo instanceof MacroClassEvent) {
+      hover = new vscode.Hover(new vscode.MarkdownString(`(event) ${lastInfo.macroClass}.${lastInfo.name}`));
     } else {
       let tokenAtOffset = completionInfo.getTokenByIndex(iTokenAtOffset);
       if (tokenAtOffset.isIdentifier()) {

@@ -4,7 +4,8 @@ import { parseLuaSource, LuaParseResults, ParseNode, Comment, MemberExpression, 
   ForGenericStatement, ScopedIdentifierInfo, Block, LocalStatement, Expression, ParseNodeLocation, ElseifClause } from './luaParser';
 import * as vscode from 'vscode';
 import { helpCompletionInfo, MacroFuncCompletionInfo, CvarFunctionCompletionInfo, MacroClassCompletionInfo,
-  LuaObjectCompletionInfo, LuaFunctionCompletionInfo, extractLuaParamByIndex, extractMacroParamByIndex } from './seHelp';
+  LuaObjectCompletionInfo, LuaFunctionCompletionInfo, extractLuaParamByIndex, extractMacroParamByIndex,
+  MacroClassEvent } from './seHelp';
 import {worldScriptsStorage} from './worldScripts';
 import * as seFilesystem from './sefilesystem';
 
@@ -332,9 +333,9 @@ export class DocumentCompletionInfo {
       return undefined;
     }
   }
-
+    
   resolveMemberExpressionRecursive(memberExpressionOrIdentifier: ParseNode|undefined):
-    VariableInfo | MacroFuncCompletionInfo | CvarFunctionCompletionInfo | MacroClassCompletionInfo | LuaObjectCompletionInfo | LuaFunctionCompletionInfo | string | undefined
+    MacroFuncCompletionInfo | CvarFunctionCompletionInfo | MacroClassCompletionInfo | LuaObjectCompletionInfo | LuaFunctionCompletionInfo | MacroClassEvent | undefined
   {
     if (memberExpressionOrIdentifier instanceof Identifier) {
       let identifier: Identifier = memberExpressionOrIdentifier;
@@ -368,7 +369,7 @@ export class DocumentCompletionInfo {
   }
 
   resolveMemberExpressionAtOffset(offset: number):
-  VariableInfo|MacroFuncCompletionInfo|CvarFunctionCompletionInfo|MacroClassCompletionInfo|LuaObjectCompletionInfo|LuaFunctionCompletionInfo|string|undefined
+  VariableInfo|MacroFuncCompletionInfo|CvarFunctionCompletionInfo|MacroClassCompletionInfo|LuaObjectCompletionInfo|LuaFunctionCompletionInfo|MacroClassEvent|undefined
   {
     if (this.parseResults  === undefined || this.parseResults.parsedChunk === undefined) {
       return undefined;
@@ -744,7 +745,7 @@ function resolveIdentifierTypeFromInitialization(identifierInfo: ScopedIdentifie
 }
 
 function resolveExpressionType(expression: Expression, completionInfo: DocumentCompletionInfo) {
-  function resolveType(inType: VariableInfo|MacroFuncCompletionInfo|CvarFunctionCompletionInfo|MacroClassCompletionInfo|LuaObjectCompletionInfo|LuaFunctionCompletionInfo|string|undefined): string|undefined
+  function resolveType(inType: VariableInfo|MacroFuncCompletionInfo|CvarFunctionCompletionInfo|MacroClassCompletionInfo|LuaObjectCompletionInfo|LuaFunctionCompletionInfo|MacroClassEvent|undefined): string|undefined
   {
     function extractCppType(cppType: string) {
       {
@@ -775,9 +776,8 @@ function resolveExpressionType(expression: Expression, completionInfo: DocumentC
       return extractCppType(inType.returnType);
     } else if (inType instanceof MacroClassCompletionInfo) {
       return inType.name;
-    } else if (inType instanceof LuaObjectCompletionInfo) {
-      return undefined;
-    } else if (inType instanceof LuaFunctionCompletionInfo) {
+    } else if (inType instanceof LuaObjectCompletionInfo || inType instanceof LuaFunctionCompletionInfo
+        || inType instanceof MacroClassEvent) {
       return undefined;
     } else {
       return inType;
