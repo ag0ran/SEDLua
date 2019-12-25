@@ -362,9 +362,15 @@ export class DocumentCompletionInfo {
           }
         }
         identifierOrMemberExpression = memberExpression;
-        return ParseNodeVisitResult.Stop;
+        // continue, although we have found a member expression, as we might still find a member expression within member expression
+        return ParseNodeVisitResult.Continue;
       } else if (parseNode.type === "Identifier") {
-        identifierOrMemberExpression = parseNode as Identifier;
+        let identifier = parseNode as Identifier;
+        let existingMemberExpression = identifierOrMemberExpression && identifierOrMemberExpression.type === "MemberExpression" ? identifierOrMemberExpression as MemberExpression : undefined;
+        // identifier may not override already found member expression it is a part of (in that case we need to return the member expression)
+        if (!existingMemberExpression || existingMemberExpression.identifier !== identifier) {
+          identifierOrMemberExpression = identifier;
+        }
         return ParseNodeVisitResult.Stop;
       }
       return ParseNodeVisitResult.Continue;

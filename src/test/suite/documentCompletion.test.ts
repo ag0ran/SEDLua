@@ -246,9 +246,47 @@ async function testWorldScriptsParsing() {
   });
 }
 
+async function testMemberExpressionWithinMemberExpression()
+{
+  test('Member expression within member expression', async function() {
+    try {
+      let sampleScriptUri = softPathToUri("Content/MemberExpressionWithinMemberExpression.lua");
+      let textDocument = await vscode.workspace.openTextDocument(sampleScriptUri);  
+      assert(textDocument, "Unable to open document");
+      let documentCompletionHandler = new DocumentCompletionHandler(textDocument);
+      let completionInfo = documentCompletionHandler.getCompletionInfoNow();
+      assert(completionInfo, "Error getting completion info");
+      completionInfo = completionInfo!;
+      assert(completionInfo.parseResults);
+
+      // testing member function within member expression
+      {
+        let offset = textDocument.offsetAt(new vscode.Position(3, 10));
+        let memberExpressionInfo = completionInfo.resolveMemberExpressionAtOffset(offset);
+        assert(memberExpressionInfo !== undefined);
+        assert(memberExpressionInfo instanceof MacroFuncCompletionInfo);
+        memberExpressionInfo = memberExpressionInfo as MacroFuncCompletionInfo;
+        assert(memberExpressionInfo.name === "GetName");
+      }
+      // testing non-member function within member expression
+      {
+        let offset = textDocument.offsetAt(new vscode.Position(4, 13));
+        let memberExpressionInfo = completionInfo.resolveMemberExpressionAtOffset(offset);
+        assert(memberExpressionInfo !== undefined);
+        assert(memberExpressionInfo instanceof MacroFuncCompletionInfo);
+        memberExpressionInfo = memberExpressionInfo as MacroFuncCompletionInfo;
+        assert(memberExpressionInfo.name === "tstGetSampleObject");
+      }
+    } catch (err) {
+      assert(false, "Tests failed due to error: " + err.message);
+    }
+  });
+}
+
 suite('Document completion', async () => {
   await testDocumentParsing();
   await testWorldScriptsParsing();
   await testGlobals();
   await testScopedTypes();
+  await testMemberExpressionWithinMemberExpression();
 });
