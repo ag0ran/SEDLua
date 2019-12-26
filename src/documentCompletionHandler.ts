@@ -69,8 +69,7 @@ export class DocumentCompletionInfo {
     return localIdentifierInfo;
   }
 
-  getIdentifierType(identifierOffset: number, name: string): string|undefined {
-    let localIdentifierInfo = this.getLocalIdentifierInfoAtOffset(identifierOffset, name);
+  getIdentifierTypeForIdentifierInfo(localIdentifierInfo: ScopedIdentifierInfo|undefined, name: string): string|undefined {
     if (localIdentifierInfo) {
       // hinted type on local identifier has precendence over globally hinted variable type
       if (localIdentifierInfo.typeHinted) {
@@ -85,6 +84,11 @@ export class DocumentCompletionInfo {
     }
     let varInfo = this.getVariableInfo(name);
     return varInfo ? varInfo.type : undefined;
+  }
+
+  getIdentifierType(identifierOffset: number, name: string): string|undefined {
+    let localIdentifierInfo = this.getLocalIdentifierInfoAtOffset(identifierOffset, name);
+    return this.getIdentifierTypeForIdentifierInfo(localIdentifierInfo, name);
   }
 
 
@@ -289,98 +293,60 @@ export class DocumentCompletionInfo {
   getFunctionCallInfoAtOffset(offset: number):
     [MacroFuncCompletionInfo|CvarFunctionCompletionInfo|LuaFunctionCompletionInfo, number]|undefined
   {
-    // go through the tokens starting at the current offset, trying to find opening '(' character preceeded by a known function
-    let iTokenAtOffset = this.getTokenIndexAtOffset(offset);
-    if (iTokenAtOffset === -1) {
+    let parseResults = this.parseResults;
+    if (!parseResults || !parseResults.parsedChunk) {
       return undefined;
     }
-    let firstToken = this.tokens[iTokenAtOffset];
-    // if were exactly at the closing bracket, we should move one token back
-    // (otherwise that would be considered as already closed function call and no
-    // signature would be given)
-    if (firstToken.rangeStart === offset && firstToken.isPunctuator(')')) {
-      iTokenAtOffset--;
-    }
-
-    let bracketCounter = 0;
-    let parameter = 0;
-    let potentialCallStartFound = false;
-    let iCurrentToken = iTokenAtOffset;
-    let expectingTokenTypesAndValues: [LuaTokenType, string[]][] = [];
-    function IsTokenUnexpected(token: any): boolean {
-      if (expectingTokenTypesAndValues.length === 0) {
-        return false;
+    // we need to find the innermost function call parse node that contains provided offset
+    let callExpression: CallExpression|undefined;
+    let iParameterInsideCallExpression: number;
+    function findFunctionCallAtOffsetVisitor(parseNode: ParseNode): ParseNodeVisitResult {
+      if (!parseNode.loc.containsPos(offset)) {
+        return ParseNodeVisitResult.SkipNode;
       }
-      for (let expectedTypeAndValue of expectingTokenTypesAndValues) {
-        let [expectedType, expectedValues] = expectedTypeAndValue;
-        if (token.type === expectedType) {
-          for (let value of expectedValues) {
-            if (token.value === value) {
-              return false;
+      if (parseNode instanceof CallExpression) {
+        // offset must be after the base (what is called) to be inside the parameter list (but before the end)
+        if (offset > parseNode.base.loc.rangeEnd && offset < parseNode.loc.rangeEnd) {
+          // find the parameter the offset is in
+          let iParam = 0;
+          for (let arg of parseNode.args) {
+            if (arg.loc.containsPos(offset)) {
+              break;
             }
+            if (arg.loc.rangeStart > offset) {
+              break;
+            }
+            iParam++;
           }
+          if (iParam > 0 && iParam > parseNode.args.length - 1) {
+            iParam = parseNode.args.length - 1;
+          }
+          iParameterInsideCallExpression = iParam;
+          callExpression = parseNode;
         }
       }
-      return true;
+      return ParseNodeVisitResult.Continue;
     }
-    for ( ; iCurrentToken >= 0; --iCurrentToken) {
-      let currentToken = this.tokens[iCurrentToken];
 
-      if (IsTokenUnexpected(currentToken)) {
-        return undefined;
-      } else {
-        expectingTokenTypesAndValues = [];
-      }
+    parseResults.parsedChunk.visitChildren(findFunctionCallAtOffsetVisitor);
 
-      if (currentToken.value === '(') {
-        if (bracketCounter === 0) {
-          potentialCallStartFound = true;
-          break;
-        }
-        bracketCounter--;
-        continue;
-      }
-     
-      // detecting nested function calls
-      if (currentToken.value === ')') {
-        bracketCounter++;
-        continue;
-      }
-      // skip tokens inside nested calls
-      if (bracketCounter > 0) {
-        continue;
-      }
-      if (currentToken.value === ',') {
-        parameter++;
-        continue;
-      }
-      if (currentToken.type === LuaTokenType.Identifier
-          || currentToken.type === LuaTokenType.StringLiteral
-          || currentToken.type === LuaTokenType.NumericLiteral) {
-        expectingTokenTypesAndValues = [[LuaTokenType.Punctuator, [",", "+", "-", "*", "%", "(", "{"]]];
-      }
-    }
-    if (!potentialCallStartFound || iCurrentToken <= 0) {
+    if (!callExpression) {
       return undefined;
     }
-    // try to resolve indexing expression starting at the token before the call start
-    let expressionBeforeInfo = this.resolveIndexingExpressionAtToken(iCurrentToken - 1);
-    if (!expressionBeforeInfo) {
-      return undefined;
-    }
-
-    if (expressionBeforeInfo instanceof MacroFuncCompletionInfo
-        || expressionBeforeInfo instanceof CvarFunctionCompletionInfo
-        || expressionBeforeInfo instanceof LuaFunctionCompletionInfo) {
-      return [expressionBeforeInfo, parameter];
-    } else if (expressionBeforeInfo instanceof ScopedIdentifierInfo) {
-      let identifierInfo: ScopedIdentifierInfo = expressionBeforeInfo;
+    iParameterInsideCallExpression = iParameterInsideCallExpression!;
+    let baseExpressionValue = this.resolveMemberExpressionRecursive(callExpression.base);
+    if (baseExpressionValue instanceof MacroFuncCompletionInfo
+      || baseExpressionValue instanceof CvarFunctionCompletionInfo
+      || baseExpressionValue instanceof LuaFunctionCompletionInfo) {
+      return [baseExpressionValue, iParameterInsideCallExpression];
+    } else if (baseExpressionValue instanceof ScopedIdentifierInfo) {
+      let identifierInfo: ScopedIdentifierInfo = baseExpressionValue;
       if (!identifierInfo.initializeParseNode || !(identifierInfo.initializeParseNode instanceof FunctionDeclaration)) {
         return undefined;
       }
       let luaFuncCompletionInfo = this.functionDeclarationToLuaFunctionCompletion(identifierInfo.initializeParseNode);
       if (luaFuncCompletionInfo) {
-        return [luaFuncCompletionInfo, parameter];
+        return [luaFuncCompletionInfo, iParameterInsideCallExpression];
       } else {
         return undefined;
       }
@@ -394,7 +360,13 @@ export class DocumentCompletionInfo {
   {
     if (memberExpressionOrIdentifier instanceof Identifier) {
       let identifier: Identifier = memberExpressionOrIdentifier;
-      let identifierType = this.getIdentifierType(identifier.loc.rangeStart + 1, identifier.name);
+      let identifierInfo = this.getLocalIdentifierInfoAtOffset(identifier.loc.rangeStart + 1, identifier.name);
+      // if this identifier is a function (initialized in a function declaration as its identifier, not as a param or something else!)
+      if (identifierInfo && identifierInfo.initializeParseNode && identifierInfo.initializeParseNode instanceof FunctionDeclaration
+          && identifierInfo.identifier === identifierInfo.initializeParseNode.identifier) {
+        return this.functionDeclarationToLuaFunctionCompletion(identifierInfo.initializeParseNode);
+      }
+      let identifierType = this.getIdentifierTypeForIdentifierInfo(identifierInfo, identifier.name);
       if (identifierType !== undefined) {
         return identifierType !== "" ? helpCompletionInfo.findMacroClassInfo(identifierType) : undefined;
       }

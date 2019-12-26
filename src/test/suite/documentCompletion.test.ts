@@ -3,14 +3,14 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 import {LuaTokenType} from '../../luaLexer';
 import {DocumentCompletionHandler, DocumentCompletionInfo} from '../../documentCompletionHandler';
-import {helpCompletionInfo, HelpCompletionInfo, MacroFuncCompletionInfo, loadHelpCompletionInfo} from '../../seHelp';
+import {helpCompletionInfo, HelpCompletionInfo, MacroFuncCompletionInfo, loadHelpCompletionInfo, LuaFunctionCompletionInfo} from '../../seHelp';
 import fs = require('fs');
 import { softPathToUri, softPathToHardPath } from '../../sefilesystem';
 import { ScopedIdentifierInfo } from '../../luaParser';
 
-async function testDocumentParsing() {
+async function testFunctionCallInfo() {
   try {
-    test('Opening document', async function() {
+    test('Function call info', async function() {
       let sampleScriptUri = softPathToUri("Content/SignatureTestScript.lua");
       let textDocument = await vscode.workspace.openTextDocument(sampleScriptUri);  
       assert(textDocument, "Unable to open document");
@@ -18,6 +18,33 @@ async function testDocumentParsing() {
       let completionInfo = documentCompletionHandler.getCompletionInfoNow();
       assert(completionInfo, "Error getting completion info");
       completionInfo = completionInfo!;
+
+      function expectLuaFuncCompletionInfo(line: number, col: number, funcName: string, expectedParamIndex: number) {
+        let functionCallInfo = completionInfo!.getFunctionCallInfoAtOffset(textDocument.offsetAt(new vscode.Position(line, col)));
+        assert(functionCallInfo);
+        if (functionCallInfo) {
+          let [funcInfo, parameter] = functionCallInfo;
+          assert(funcInfo instanceof LuaFunctionCompletionInfo);
+          assert(funcInfo.name === funcName);
+          assert(parameter === expectedParamIndex);
+        }
+      }
+
+      function expectMacroFuncCompletionInfo(line: number, col: number, funcName: string, expectedParamIndex: number) {
+        let functionCallInfo = completionInfo!.getFunctionCallInfoAtOffset(textDocument.offsetAt(new vscode.Position(line, col)));
+        assert(functionCallInfo);
+        if (functionCallInfo) {
+          let [funcInfo, parameter] = functionCallInfo;
+          assert(funcInfo instanceof MacroFuncCompletionInfo);
+          assert(funcInfo.name === funcName);
+          assert(parameter === expectedParamIndex);
+        }
+      }
+      function expectNoFuncCompletionInfo(line: number, col: number) {
+        let functionCallInfo = completionInfo!.getFunctionCallInfoAtOffset(textDocument.offsetAt(new vscode.Position(line, col)));
+        assert(!functionCallInfo);
+      }
+
       {
         let tokenIndexAt_ln2_col16 = completionInfo.getTokenIndexAtOffset(textDocument.offsetAt(new vscode.Position(1, 15)));
         let tokenAt_ln2_col16 = completionInfo.getTokenByIndex(tokenIndexAt_ln2_col16);
@@ -25,56 +52,53 @@ async function testDocumentParsing() {
         assert(tokenAt_ln2_col16.value === "derivedSampleObject");
       }
 
-      {
-        let functionCallInfo = completionInfo.getFunctionCallInfoAtOffset(textDocument.offsetAt(new vscode.Position(2, 43)));
-        assert(functionCallInfo);
-        if (functionCallInfo) {
-          let [funcInfo, parameter] = functionCallInfo;
-          assert(funcInfo instanceof MacroFuncCompletionInfo);
-          assert(funcInfo.name === "AcceptLotsOfParams");
-          assert(parameter === 1);
-        }
-      }
+      expectMacroFuncCompletionInfo(2, 43, "AcceptLotsOfParams", 1);
 
-      {
-        let functionCallInfo = completionInfo.getFunctionCallInfoAtOffset(textDocument.offsetAt(new vscode.Position(5, 27)));
-        assert(functionCallInfo);
-        if (functionCallInfo) {
-          let [funcInfo, parameter] = functionCallInfo;
-          assert(funcInfo instanceof MacroFuncCompletionInfo);
-          assert(funcInfo.name === "tstGetSampleObject");
-          assert(parameter === 0);
-        }
-      }
-      {
-        let functionCallInfo = completionInfo.getFunctionCallInfoAtOffset(textDocument.offsetAt(new vscode.Position(6, 31)));
-        assert(functionCallInfo);
-        if (functionCallInfo) {
-          let [funcInfo, parameter] = functionCallInfo;
-          assert(funcInfo instanceof MacroFuncCompletionInfo);
-          assert(funcInfo.name === "tstGetSampleObject");
-          assert(parameter === 0);
-        }
-      }
-      {
-        let functionCallInfo = completionInfo.getFunctionCallInfoAtOffset(textDocument.offsetAt(new vscode.Position(5, 11)));
-        assert(!functionCallInfo);
-      }
+      expectMacroFuncCompletionInfo(5, 27, "tstGetSampleObject", 0);
+      expectMacroFuncCompletionInfo(6, 31, "tstGetSampleObject", 0);
 
-      {
-        let functionCallInfo = completionInfo.getFunctionCallInfoAtOffset(textDocument.offsetAt(new vscode.Position(8, 42)));
-        assert(functionCallInfo);
-        if (functionCallInfo) {
-          let [funcInfo, parameter] = functionCallInfo;
-          assert(funcInfo instanceof MacroFuncCompletionInfo);
-          assert(funcInfo.name === "AcceptLotsOfParams");
-          assert(parameter === 1);
-        }
-      }
-      {
-        let functionCallInfo = completionInfo.getFunctionCallInfoAtOffset(textDocument.offsetAt(new vscode.Position(12, 28)));
-        assert(!functionCallInfo);
-      }
+      expectNoFuncCompletionInfo(5, 11);
+
+      expectMacroFuncCompletionInfo(8, 42, "AcceptLotsOfParams", 1);
+
+      expectNoFuncCompletionInfo(12, 27);
+      expectMacroFuncCompletionInfo(12, 26, "tstGetSampleObject", 0);
+      expectMacroFuncCompletionInfo(12, 19, "tstGetSampleObject", 0);
+
+      // function with table constructor as parameter
+      expectMacroFuncCompletionInfo(14, 89, "AcceptLotsOfParams", 2);
+      
+      // function with table constructor as parameter within another function as a parameter to another function
+      expectMacroFuncCompletionInfo(21, 93, "AcceptLotsOfParams", 2);
+
+      // no func completion info before opening parenthesis
+      expectNoFuncCompletionInfo(22, 42);
+      // function with a lot of missing (erroneous params): param 1
+      expectMacroFuncCompletionInfo(22, 45, "AcceptLotsOfParams", 1);
+      expectMacroFuncCompletionInfo(22, 46, "AcceptLotsOfParams", 1);
+      // function with a lot of missing (erroneous params): param 2
+      expectMacroFuncCompletionInfo(22, 47, "AcceptLotsOfParams", 2);
+      expectMacroFuncCompletionInfo(22, 49, "AcceptLotsOfParams", 2);
+      // function with a lot of missing (erroneous params): param 3
+      expectMacroFuncCompletionInfo(22, 50, "AcceptLotsOfParams", 3);
+      expectMacroFuncCompletionInfo(22, 51, "AcceptLotsOfParams", 3);
+      // function with a lot of missing (erroneous params): param 5
+      expectMacroFuncCompletionInfo(22, 54, "AcceptLotsOfParams", 5);
+      expectMacroFuncCompletionInfo(22, 56, "AcceptLotsOfParams", 5);
+      // function with a lot of missing (erroneous params): param 6
+      expectMacroFuncCompletionInfo(22, 57, "AcceptLotsOfParams", 6);
+      expectMacroFuncCompletionInfo(22, 58, "AcceptLotsOfParams", 6);
+      // no func completion info after closing parenthesis
+      expectNoFuncCompletionInfo(22, 59);
+
+      // function with a lot of missing (erroneous params): param 0
+      expectMacroFuncCompletionInfo(23, 43, "AcceptLotsOfParams", 0);
+      expectMacroFuncCompletionInfo(23, 47, "AcceptLotsOfParams", 0);
+
+      // lua function - no params means parameter 0
+      expectLuaFuncCompletionInfo(33, 8, "LocFunc", 0);
+      // lua function - no params means parameter 0
+      expectLuaFuncCompletionInfo(34, 11, "LocFunc", 1);
     });
   } catch (err) {
     assert(false, "Tests failed due to error: " + err.message);
@@ -284,7 +308,7 @@ async function testMemberExpressionWithinMemberExpression()
 }
 
 suite('Document completion', async () => {
-  await testDocumentParsing();
+  await testFunctionCallInfo();
   await testWorldScriptsParsing();
   await testGlobals();
   await testScopedTypes();

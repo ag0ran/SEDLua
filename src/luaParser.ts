@@ -25,9 +25,22 @@ export class ParseNodeLocation {
       this.endCol = this.startCol;
     }
   }
+  isValid() {
+    return this.rangeStart > -1 && this.rangeEnd > -1;
+  }
   containsPos(pos: number) {
     return pos >= this.rangeStart && pos <= this.rangeEnd;
-   }
+  }
+  clone(): ParseNodeLocation {
+    let loc = new ParseNodeLocation();
+    loc.startLine = this.startLine;
+    loc.startCol = this.startCol;
+    loc.endLine = this.endLine;
+    loc.endCol = this.endCol;
+    loc.rangeStart = this.rangeStart;
+    loc.rangeEnd = this.rangeEnd;
+    return loc;
+  }
   startLine: number = -1;
   startCol: number = -1;
   endLine: number = -1;
@@ -950,19 +963,43 @@ export function parseLuaSource(inputSource: string, onCreateNodeCallback?: OnCre
     if (token.type  === LuaTokenType.Punctuator) {
       switch (token.value) {
         case '(':
+          function createErroneousLocationMarker() {
+            let erroneousMarker = createLocationMarker();
+            erroneousMarker.rangeStart++;
+            erroneousMarker.startCol++;
+            return erroneousMarker;
+          }
+          function finishErroneousLocationMarker(erroneousMarker: ParseNodeLocation) {
+            // finishing right before the token that follows
+            erroneousMarker.rangeEnd = token.rangeStart;
+            erroneousMarker.endCol = token.startCol;
+            erroneousMarker.endLine = token.startLine;
+            return erroneousMarker;
+          }
+          
+          let erroneousMarker = createErroneousLocationMarker();
+          
           moveToNextToken();
 
           // List of expressions
           var expressions = [];
           var expression = parseExpression();
           if (expression) {
+            if (expression instanceof ErroneousNode) {
+              expression.loc = finishErroneousLocationMarker(erroneousMarker);
+            }
             expressions.push(expression);
           }
+          erroneousMarker = createErroneousLocationMarker();
           while (consumePunctuator(',')) {
             expression = parseExpectedExpression();
             if (expression) {
+              if (expression instanceof ErroneousNode) {
+                expression.loc = finishErroneousLocationMarker(erroneousMarker);
+              }
               expressions.push(expression);
             }
+            erroneousMarker = createErroneousLocationMarker();
           }
 
           expectPunctuator(')');
@@ -1681,7 +1718,7 @@ export function parseLuaSource(inputSource: string, onCreateNodeCallback?: OnCre
     return locations.pop();
   }
   function pushLocation(marker: ParseNodeLocation) {
-    locations.push(marker);
+    locations.push(marker.clone());
   }
   function createLocationMarker() {
     return new ParseNodeLocation(token);
