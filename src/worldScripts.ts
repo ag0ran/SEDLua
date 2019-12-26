@@ -50,9 +50,6 @@ export class WorldScriptsStorage {
       return undefined;
     }
     if (!worldPath || !entityId) {
-      if (worldScriptInfos.length !== 1) {
-        return undefined;
-      }
       return worldScriptInfos[0];
     }
     return worldScriptInfos.find((worldScriptInfo) => worldScriptInfo.world === worldPath && worldScriptInfo.entityId === entityId);
