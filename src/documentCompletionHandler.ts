@@ -1,11 +1,12 @@
 import { LuaToken, LuaTokenType } from './luaLexer';
 import { parseLuaSource, LuaParseResults, ParseNode, Comment, MemberExpression, Identifier,
   ParseNodeVisitResult, visitParseNodes, CallExpression, FunctionDeclaration, ForNumericStatement,
-  ForGenericStatement, ScopedIdentifierInfo, Block, LocalStatement, Expression, ParseNodeLocation, ElseifClause } from './luaParser';
+  ForGenericStatement, ScopedIdentifierInfo, Block, LocalStatement, Expression, ParseNodeLocation, ElseifClause, VarargLiteral } from './luaParser';
 import * as vscode from 'vscode';
 import { helpCompletionInfo, MacroFuncCompletionInfo, CvarFunctionCompletionInfo, MacroClassCompletionInfo,
   LuaObjectCompletionInfo, LuaFunctionCompletionInfo, extractLuaParamByIndex, extractMacroParamByIndex,
-  MacroClassEvent } from './seHelp';
+  MacroClassEvent, 
+  LuaFunctionParamCompletionInfo} from './seHelp';
 import {worldScriptsStorage} from './worldScripts';
 import * as seFilesystem from './sefilesystem';
 
@@ -94,12 +95,9 @@ export class DocumentCompletionInfo {
       varInfos.forEach(callbackFunc);
     }
   }
-  // Returns string showing the initialization of the identifier (including optional comment directly above).
-  getIdentifierDefinitionString(identifierInfo: ScopedIdentifierInfo): string|undefined {
-    let initParseNode = identifierInfo.initializeParseNode;
-    if (!initParseNode) {
-      return undefined;
-    }
+
+  // Returns value of the comment before parse node
+  getCommentTokenBeforeInitParseNode(initParseNode: ParseNode): LuaToken|undefined {
     let locInit = initParseNode.loc;
     // it makes sense to include the token before the identifier in case of local statement or function declaration
     let commentTokenBefore;
@@ -117,6 +115,17 @@ export class DocumentCompletionInfo {
         iSearchToken--;
       }
     }
+    return commentTokenBefore;
+  }
+  // Returns string showing the initialization of the identifier (including optional comment directly above).
+  getIdentifierDefinitionString(identifierInfo: ScopedIdentifierInfo): string|undefined {
+    let initParseNode = identifierInfo.initializeParseNode;
+    if (!initParseNode) {
+      return undefined;
+    }
+    let locInit = initParseNode.loc;
+    // it makes sense to include the token before the identifier in case of local statement or function declaration
+    let commentTokenBefore = this.getCommentTokenBeforeInitParseNode(initParseNode);
     let defStart = locInit.rangeStart;
     let defEnd = locInit.rangeEnd;
     let completionInfo = this;
@@ -250,6 +259,32 @@ export class DocumentCompletionInfo {
     }
   }
 
+  private extractFunctionDeclarationIdentifier(identifier: ParseNode|undefined): string {
+    if (!identifier || !(identifier instanceof Identifier)) {
+      return "";
+    }
+    return identifier.name;
+  }
+
+  functionDeclarationToLuaFunctionCompletion(functionDeclaration: FunctionDeclaration): LuaFunctionCompletionInfo|undefined {
+    let funcCompletionInfo = new LuaFunctionCompletionInfo();
+    funcCompletionInfo.name = this.extractFunctionDeclarationIdentifier(functionDeclaration.identifier);
+    for (let param of functionDeclaration.parameters) {
+      let paramCompletionInfo = new LuaFunctionParamCompletionInfo();
+      if (param instanceof Identifier) {
+        paramCompletionInfo.name = param.name;
+      } else if (param instanceof VarargLiteral) {
+        paramCompletionInfo.name = param.rawValue;
+      }
+      funcCompletionInfo.params.push(paramCompletionInfo);
+    }
+    let commentTokenBefore = this.getCommentTokenBeforeInitParseNode(functionDeclaration);
+    if (commentTokenBefore) {
+      funcCompletionInfo.desc = (commentTokenBefore.value as string).trim();
+    }
+    return funcCompletionInfo;
+  }
+
   // Tries to find a function call of a known function at given offset. Returns the function info and the current parameter index if function is found.
   getFunctionCallInfoAtOffset(offset: number):
     [MacroFuncCompletionInfo|CvarFunctionCompletionInfo|LuaFunctionCompletionInfo, number]|undefined
@@ -338,6 +373,17 @@ export class DocumentCompletionInfo {
         || expressionBeforeInfo instanceof CvarFunctionCompletionInfo
         || expressionBeforeInfo instanceof LuaFunctionCompletionInfo) {
       return [expressionBeforeInfo, parameter];
+    } else if (expressionBeforeInfo instanceof ScopedIdentifierInfo) {
+      let identifierInfo: ScopedIdentifierInfo = expressionBeforeInfo;
+      if (!identifierInfo.initializeParseNode || !(identifierInfo.initializeParseNode instanceof FunctionDeclaration)) {
+        return undefined;
+      }
+      let luaFuncCompletionInfo = this.functionDeclarationToLuaFunctionCompletion(identifierInfo.initializeParseNode);
+      if (luaFuncCompletionInfo) {
+        return [luaFuncCompletionInfo, parameter];
+      } else {
+        return undefined;
+      }
     } else {
       return undefined;
     }
@@ -431,7 +477,7 @@ export class DocumentCompletionInfo {
   }
 
   resolveIndexingExpressionAtToken(iStartingToken: number):
-    MacroFuncCompletionInfo|CvarFunctionCompletionInfo|MacroClassCompletionInfo|string|LuaFunctionCompletionInfo|LuaObjectCompletionInfo|undefined
+    MacroFuncCompletionInfo|CvarFunctionCompletionInfo|MacroClassCompletionInfo|string|LuaFunctionCompletionInfo|LuaObjectCompletionInfo|ScopedIdentifierInfo|undefined
   {
     let startingToken = this.tokens[iStartingToken];
     if (startingToken.type !== LuaTokenType.Identifier) {
@@ -457,7 +503,7 @@ export class DocumentCompletionInfo {
     }
 
     // going through the token chain in reverse and trying to index the chain up to current token
-    let lastInfo: MacroClassCompletionInfo|MacroFuncCompletionInfo|CvarFunctionCompletionInfo|LuaFunctionCompletionInfo|LuaObjectCompletionInfo|string|undefined;
+    let lastInfo: MacroClassCompletionInfo|MacroFuncCompletionInfo|CvarFunctionCompletionInfo|LuaFunctionCompletionInfo|LuaObjectCompletionInfo|ScopedIdentifierInfo|string|undefined;
     let indexingToken: string|undefined;
     while (tokenChain.length > 0) {
       let token = tokenChain.pop()!;
@@ -479,6 +525,9 @@ export class DocumentCompletionInfo {
           if (!lastInfo) {
             lastInfo = helpCompletionInfo.findMacroFuncInfo(token.rawValue);
           }
+        }
+        if (!lastInfo) {
+          lastInfo = this.getLocalIdentifierInfoAtOffset(token.rangeStart + 1, token.rawValue);
         }
         if (!lastInfo) {
           return undefined;
