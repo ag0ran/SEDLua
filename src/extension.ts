@@ -712,10 +712,7 @@ class SEDLua implements vscode.CompletionItemProvider, vscode.DefinitionProvider
       } else {
         completionItem.kind = vscode.CompletionItemKind.Variable;
       }
-      let defString = completionInfo!.getIdentifierDefinitionString(identifierInfo);
-      if (defString) {
-        completionItem.documentation = createLuaMarkdownWithComment(defString);
-      }
+      completionItem.documentation = createIdentifierInfoDocumentation(completionInfo!, identifierInfo.name, "", identifierInfo);
       funcAndVarCompletionItems.push(completionItem);
     });
 
@@ -807,24 +804,27 @@ function getLuaObjectDescriptionString(objInfo: LuaObjectCompletionInfo) {
   return result;
 }
 
-function createLuaObjectCompletionItem(completionInfo: DocumentCompletionInfo, objInfo: LuaObjectCompletionInfo) {
-  const completionItem = new vscode.CompletionItem(objInfo.name);
-  completionItem.kind = vscode.CompletionItemKind.Variable;
+function createIdentifierInfoDocumentation(completionInfo: DocumentCompletionInfo, objName: string, objDesc: string, identifierInfo?: ScopedIdentifierInfo): vscode.MarkdownString {
   let typeDesc = "";
-  let desc: string = objInfo.desc;
-  if (objInfo.identifierInfo) {
-    if (objInfo.identifierInfo.type) {
-      typeDesc = " : " + objInfo.identifierInfo.type;
+  let desc: string = objDesc;
+  if (identifierInfo) {
+    if (identifierInfo.type) {
+      typeDesc = " : " + identifierInfo.type;
     }
     if (!desc) {
-      let identifierDefinitionString = completionInfo.getIdentifierDefinitionString(objInfo.identifierInfo);
+      let identifierDefinitionString = completionInfo.getIdentifierDefinitionString(identifierInfo);
       if (identifierDefinitionString) {
         desc = identifierDefinitionString;
       }
     }
   }
-  completionItem.documentation =  completionItem.documentation = createLuaMarkdownWithComment(
-    getLuaObjectDescriptionString(objInfo) + typeDesc, desc);
+  return createLuaMarkdownWithComment(objName + typeDesc, desc);
+}
+
+function createLuaObjectCompletionItem(completionInfo: DocumentCompletionInfo, objInfo: LuaObjectCompletionInfo) {
+  const completionItem = new vscode.CompletionItem(objInfo.name);
+  completionItem.kind = vscode.CompletionItemKind.Variable;
+  completionItem.documentation = createIdentifierInfoDocumentation(completionInfo, getLuaObjectDescriptionString(objInfo), objInfo.desc, objInfo.identifierInfo);
   return completionItem;
 }
 
