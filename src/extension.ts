@@ -259,6 +259,12 @@ class SEDLua implements vscode.CompletionItemProvider, vscode.DefinitionProvider
       if (!hover) {
         hover = new vscode.Hover(createLuaMarkdownWithComment(getLuaObjectDescriptionString(expressionInfo), expressionInfo.desc));
       }
+      if (hover && expressionInfo.identifierInfo) {
+        let identifierDefinitionString = completionInfo.getIdentifierDefinitionString(expressionInfo.identifierInfo);
+        if (identifierDefinitionString) {
+          hover.contents.push(createLuaMarkdownWithComment(identifierDefinitionString));
+        }
+      }
     } else if (expressionInfo instanceof MacroClassEvent) {
       hover = new vscode.Hover(new vscode.MarkdownString(`(event) ${expressionInfo.macroClass}.${expressionInfo.name}`));
     } else {
@@ -642,7 +648,7 @@ class SEDLua implements vscode.CompletionItemProvider, vscode.DefinitionProvider
             let onlySelf = indexingChar === ':';
             if (!onlySelf) {
               for (let objInfo of luaObjectCompletionInfo.objects) {
-                let objCompletionItem = createLuaObjectCompletionItem(objInfo);
+                let objCompletionItem = createLuaObjectCompletionItem(completionInfo, objInfo);
                 classCompletionItems.push(objCompletionItem);
               }
             }
@@ -738,7 +744,7 @@ class SEDLua implements vscode.CompletionItemProvider, vscode.DefinitionProvider
         funcAndVarCompletionItems.push(createLuaFuncCompletionItem(func));
       }
       for (const obj of luaCompletion.objects) {
-        funcAndVarCompletionItems.push(createLuaObjectCompletionItem(obj));
+        funcAndVarCompletionItems.push(createLuaObjectCompletionItem(completionInfo, obj));
       }
     }
 
@@ -801,11 +807,22 @@ function getLuaObjectDescriptionString(objInfo: LuaObjectCompletionInfo) {
   return result;
 }
 
-function createLuaObjectCompletionItem(objInfo: LuaObjectCompletionInfo) {
+function createLuaObjectCompletionItem(completionInfo: DocumentCompletionInfo, objInfo: LuaObjectCompletionInfo) {
   const completionItem = new vscode.CompletionItem(objInfo.name);
-  completionItem.kind = vscode.CompletionItemKind.Property;
+  completionItem.kind = vscode.CompletionItemKind.Variable;
+  let typeDesc = "";
+  let desc: string = objInfo.desc;
+  if (objInfo.identifierInfo && objInfo.identifierInfo.type) {
+    typeDesc = " : " + objInfo.identifierInfo.type;
+    if (!desc) {
+      let identifierDefinitionString = completionInfo.getIdentifierDefinitionString(objInfo.identifierInfo);
+      if (identifierDefinitionString) {
+        desc = identifierDefinitionString;
+      }
+    }
+  }
   completionItem.documentation =  completionItem.documentation = createLuaMarkdownWithComment(
-    getLuaObjectDescriptionString(objInfo), objInfo.desc);
+    getLuaObjectDescriptionString(objInfo) + typeDesc, desc);
   return completionItem;
 }
 
