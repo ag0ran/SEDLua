@@ -812,8 +812,10 @@ function createLuaObjectCompletionItem(completionInfo: DocumentCompletionInfo, o
   completionItem.kind = vscode.CompletionItemKind.Variable;
   let typeDesc = "";
   let desc: string = objInfo.desc;
-  if (objInfo.identifierInfo && objInfo.identifierInfo.type) {
-    typeDesc = " : " + objInfo.identifierInfo.type;
+  if (objInfo.identifierInfo) {
+    if (objInfo.identifierInfo.type) {
+      typeDesc = " : " + objInfo.identifierInfo.type;
+    }
     if (!desc) {
       let identifierDefinitionString = completionInfo.getIdentifierDefinitionString(objInfo.identifierInfo);
       if (identifierDefinitionString) {
