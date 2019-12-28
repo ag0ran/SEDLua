@@ -21,7 +21,7 @@
         <BRIEF_COMMENT>Returns base class of this class. Always works</BRIEF_COMMENT>
         <DETAIL_COMMENT></DETAIL_COMMENT>
         <PARAMS>INDEX iNumberOfLevels, const CHAR *szByName</PARAMS>
-        <RETURN>CSampleClass</RETURN>
+        <RETURN>CSampleClass *</RETURN>
       </FUNCTION>
       <FUNCTION>
         <NAME>AcceptLotsOfParams</NAME>

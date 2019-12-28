@@ -307,10 +307,95 @@ async function testMemberExpressionWithinMemberExpression()
   });
 }
 
+async function testMemberAssignments()
+{
+  test('Member assignments', async function() {
+    try {
+      let sampleScriptUri = softPathToUri("Content/MemberAssignments.lua");
+      let textDocument = await vscode.workspace.openTextDocument(sampleScriptUri);  
+      assert(textDocument, "Unable to open document");
+      let documentCompletionHandler = new DocumentCompletionHandler(textDocument);
+      let completionInfo = documentCompletionHandler.getCompletionInfoNow();
+      assert(completionInfo, "Error getting completion info");
+      completionInfo = completionInfo!;
+      assert(completionInfo.parseResults);
+
+      {
+        let offset = textDocument.offsetAt(new vscode.Position(9, 13));
+        let localsFinder = new LocalsFinder(offset, completionInfo);
+        let tInfo = localsFinder.getIdentifierInfo("t");
+        assert(tInfo);
+        tInfo = tInfo!;
+        assert(tInfo.members);
+        assert(tInfo.members!.length === 3);
+        {
+          let memberA = tInfo.getMemberByName("a")!;
+          assert(memberA);
+          assert(memberA.name === "a");
+          assert(memberA.members);
+          assert(memberA.members!.length === 5);
+          {
+            let memberA_x = memberA.getMemberByName("x")!;
+            assert(memberA_x);
+            assert(memberA_x.name === 'x');
+          }
+          {
+            let memberA_y = memberA.getMemberByName("y")!;
+            assert(memberA_y);
+            assert(memberA_y.name === 'y');
+          }
+          {
+            let memberA_zee = memberA.getMemberByName("zee")!;
+            assert(memberA_zee);
+            assert(memberA_zee.name === 'zee');
+            assert(memberA_zee.type === "CSampleClass");
+            assert(!memberA_zee.typeHinted);
+          }
+          {
+            let memberA_wee = memberA.getMemberByName("wee")!;
+            assert(memberA_wee);
+            assert(memberA_wee.name === 'wee');
+            assert(memberA_wee.type === "CDerivedSampleClass");
+            assert(!memberA_wee.typeHinted);
+          }
+          {
+            let memberA_u = memberA.getMemberByName("u")!;
+            assert(memberA_u);
+            assert(memberA_u.name === 'u');
+            assert(memberA_u.type === "CDerivedSampleClass");
+            assert(!memberA_u.typeHinted);
+          }
+        }
+        {
+          let memberBee = tInfo.getMemberByName("bee")!;
+          assert(memberBee);
+          assert(memberBee.name === "bee");
+          assert(!memberBee.members);
+          assert(memberBee.type === "CSampleClass");
+          assert(!memberBee.typeHinted);
+        }
+        {
+          let memberCee = tInfo.getMemberByName("cee")!;
+          assert(memberCee);
+          assert(memberCee.name === "cee");
+          assert(!memberCee.members);
+          assert(memberCee.type === "CDerivedSampleClass");
+          assert(memberCee.typeHinted);
+        }
+        assert(!tInfo.getMemberByName("nonExistant"));
+      }
+      
+    } catch (err) {
+      assert(false, "Tests failed due to error: " + err.message);
+    }
+  });
+}
+
 suite('Document completion', async () => {
   await testFunctionCallInfo();
   await testWorldScriptsParsing();
   await testGlobals();
   await testScopedTypes();
   await testMemberExpressionWithinMemberExpression();
+  await testMemberAssignments();
 });

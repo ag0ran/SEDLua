@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 import * as seFilesystem from './sefilesystem';
 import { log } from './log';
 import { loadConfig } from './configuration';
+import { ScopedIdentifierInfo } from './luaParser';
 
 function normalizeXmlValue(s: string) {
   return s.trim();
@@ -63,6 +64,7 @@ export class LuaObjectCompletionInfo {
   name: string = "";
   desc: string = "";
   base?: LuaObjectCompletionInfo;
+  identifierInfo?: ScopedIdentifierInfo;
   objects = new Array<LuaObjectCompletionInfo>();
   functions = new Array<LuaFunctionCompletionInfo>();
 

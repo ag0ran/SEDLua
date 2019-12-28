@@ -808,6 +808,12 @@ export class ScopedIdentifierInfo {
   description?: string;
   type?: string;
   typeHinted?: boolean;
+  members?: Array<ScopedIdentifierInfo>;
+  base?: ScopedIdentifierInfo;
+
+  getMemberByName(name: string): ScopedIdentifierInfo|undefined {
+    return this.members ? this.members.find((value) => value.name === name) : undefined;
+  }
 }
 
 export interface LuaParseResults {
@@ -1020,6 +1026,7 @@ export function parseLuaSource(inputSource: string, onCreateNodeCallback?: OnCre
       return finishNode(new StringCallExpression(base, stringLiteral));
     }
     raiseUnexpectedToken('function arguments', token);
+    return finishNode(new CallExpression(base, []));
   }
 
   //     primary ::= String | Numeric | nil | true | false
@@ -1519,7 +1526,7 @@ export function parseLuaSource(inputSource: string, onCreateNodeCallback?: OnCre
     // callstatement, however as it was valid it's been consumed, so raise
     // the exception on the previous token to provide a helpful message.
     raiseUnexpected(Math.max(iToken - 1, 0), token.rawValue);
-    return new ErroneousNode();
+    return finishNode(new AssignmentStatement([expression], []));
   }
 
   //     while ::= 'while' exp 'do' block 'end'
