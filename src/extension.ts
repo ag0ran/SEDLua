@@ -613,54 +613,55 @@ class SEDLua implements vscode.CompletionItemProvider, vscode.DefinitionProvider
           indexedVarToken = currentParseInfo.token2Before;
         }
 
-        let expressionInfo;
         if (indexingChar && indexedVarToken) {
-          expressionInfo = completionInfo.resolveMemberExpressionAtOffset(indexedVarToken.rangeEnd - 1);
-        }
+          let expressionInfo = completionInfo.resolveMemberExpressionAtOffset(indexedVarToken.rangeEnd - 1);
          
-        if (expressionInfo) {
-          let classCompletionItems = new Array<vscode.CompletionItem>();
-          function addMacroClassCompletionItems(macroClassInfo: MacroClassCompletionInfo) {
-            if (indexingChar === ":") {
-              helpCompletionInfo.forEachMacroClassFunction(macroClassInfo, (funcInfo) => {
-                let funcCompletionItem = createMacroFuncCompletionItem(funcInfo);
+          if (expressionInfo) {
+            let classCompletionItems = new Array<vscode.CompletionItem>();
+            function addMacroClassCompletionItems(macroClassInfo: MacroClassCompletionInfo) {
+              if (indexingChar === ":") {
+                helpCompletionInfo.forEachMacroClassFunction(macroClassInfo, (funcInfo) => {
+                  let funcCompletionItem = createMacroFuncCompletionItem(funcInfo);
+                  classCompletionItems.push(funcCompletionItem);
+                });
+              } else {
+                helpCompletionInfo.forEachMacroClassEvent(macroClassInfo, (event) => {
+                  let eventCompletionItem = new vscode.CompletionItem(event);
+                  eventCompletionItem.kind = vscode.CompletionItemKind.Event;
+                  classCompletionItems.push(eventCompletionItem);
+                });
+              }
+            }
+            if (expressionInfo instanceof MacroClassCompletionInfo) {
+              addMacroClassCompletionItems(expressionInfo);
+            } else if (expressionInfo instanceof LuaObjectCompletionInfo) {
+              let luaObjectCompletionInfo : LuaObjectCompletionInfo = expressionInfo;
+              if (luaObjectCompletionInfo.identifierInfo && luaObjectCompletionInfo.identifierInfo.type) {
+                let macroClassCompletionInfo = helpCompletionInfo.findMacroClassInfo(luaObjectCompletionInfo.identifierInfo.type);
+                if (macroClassCompletionInfo) {
+                  addMacroClassCompletionItems(macroClassCompletionInfo);
+                }
+              }
+              // when indexing with ':' only functions marked as taking self argument are displayed
+              let onlySelf = indexingChar === ':';
+              if (!onlySelf) {
+                for (let objInfo of luaObjectCompletionInfo.objects) {
+                  let objCompletionItem = createLuaObjectCompletionItem(completionInfo, objInfo);
+                  classCompletionItems.push(objCompletionItem);
+                }
+              }
+              for (let funcInfo of luaObjectCompletionInfo.functions) {
+                let funcCompletionItem = createLuaFuncCompletionItem(funcInfo);
+                if (onlySelf !== !!funcInfo.self) {
+                  continue;
+                }
                 classCompletionItems.push(funcCompletionItem);
-              });
-            } else {
-              helpCompletionInfo.forEachMacroClassEvent(macroClassInfo, (event) => {
-                let eventCompletionItem = new vscode.CompletionItem(event);
-                eventCompletionItem.kind = vscode.CompletionItemKind.Event;
-                classCompletionItems.push(eventCompletionItem);
-              });
+              }
             }
+            return classCompletionItems;
           }
-          if (expressionInfo instanceof MacroClassCompletionInfo) {
-            addMacroClassCompletionItems(expressionInfo);
-          } else if (expressionInfo instanceof LuaObjectCompletionInfo) {
-            let luaObjectCompletionInfo : LuaObjectCompletionInfo = expressionInfo;
-            if (luaObjectCompletionInfo.identifierInfo && luaObjectCompletionInfo.identifierInfo.type) {
-              let macroClassCompletionInfo = helpCompletionInfo.findMacroClassInfo(luaObjectCompletionInfo.identifierInfo.type);
-              if (macroClassCompletionInfo) {
-                addMacroClassCompletionItems(macroClassCompletionInfo);
-              }
-            }
-            // when indexing with ':' only functions marked as taking self argument are displayed
-            let onlySelf = indexingChar === ':';
-            if (!onlySelf) {
-              for (let objInfo of luaObjectCompletionInfo.objects) {
-                let objCompletionItem = createLuaObjectCompletionItem(completionInfo, objInfo);
-                classCompletionItems.push(objCompletionItem);
-              }
-            }
-            for (let funcInfo of luaObjectCompletionInfo.functions) {
-              let funcCompletionItem = createLuaFuncCompletionItem(funcInfo);
-              if (onlySelf !== !!funcInfo.self) {
-                continue;
-              }
-              classCompletionItems.push(funcCompletionItem);
-            }
-          }
-          return classCompletionItems;
+          // if something is indexed but information is not available, the we cannot return globals and locals!
+          return undefined;
         }
       }
     }
