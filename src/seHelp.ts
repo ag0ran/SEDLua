@@ -116,6 +116,7 @@ export class LuaFunctionCompletionInfo {
   self?: boolean;
   params = new Array<LuaFunctionParamCompletionInfo>();
   base?: LuaObjectCompletionInfo;
+  identifierInfo?: ScopedIdentifierInfo;
 }
 function cloneLuaFunctionCompletionInfo(src: LuaFunctionCompletionInfo): LuaFunctionCompletionInfo {
   let clone = new LuaFunctionCompletionInfo();

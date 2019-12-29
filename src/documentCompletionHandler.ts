@@ -273,10 +273,14 @@ export class DocumentCompletionInfo {
   }
 
   private extractFunctionDeclarationIdentifier(identifier: ParseNode|undefined): string {
-    if (!identifier || !(identifier instanceof Identifier)) {
-      return "";
+    if (identifier instanceof Identifier) {
+      return identifier.name;
     }
-    return identifier.name;
+    if (identifier instanceof MemberExpression) {
+      let memberExpression: MemberExpression = identifier;
+      return memberExpression.identifier.name;
+    }
+    return "";
   }
 
   functionDeclarationToLuaFunctionCompletion(functionDeclaration: FunctionDeclaration): LuaFunctionCompletionInfo|undefined {
@@ -353,7 +357,8 @@ export class DocumentCompletionInfo {
       if (!identifierInfo.initializeParseNode || !(identifierInfo.initializeParseNode instanceof FunctionDeclaration)) {
         return undefined;
       }
-      let luaFuncCompletionInfo = this.functionDeclarationToLuaFunctionCompletion(identifierInfo.initializeParseNode);
+      let completionInfo = this.getDocumentCompletionInfoForIdentifierInfo(identifierInfo);
+      let luaFuncCompletionInfo = completionInfo.functionDeclarationToLuaFunctionCompletion(identifierInfo.initializeParseNode);
       if (luaFuncCompletionInfo) {
         return [luaFuncCompletionInfo, iParameterInsideCallExpression];
       } else {
@@ -367,6 +372,7 @@ export class DocumentCompletionInfo {
   resolveMemberExpressionRecursive(memberExpressionOrIdentifier: ParseNode|undefined, getIdentifierAsLuaObject?: boolean):
     MacroFuncCompletionInfo | CvarFunctionCompletionInfo | MacroClassCompletionInfo | LuaObjectCompletionInfo | LuaFunctionCompletionInfo | MacroClassEvent | undefined
   {
+    let completionInfo = this;
     function identifierInfoToLuaObjectCompletionInfoRecursive(identifierInfo: ScopedIdentifierInfo, baseObjectCompletionInfo?: LuaObjectCompletionInfo): LuaObjectCompletionInfo {
       let luaObjectCompletionInfo = new LuaObjectCompletionInfo();
       luaObjectCompletionInfo.base = baseObjectCompletionInfo;
@@ -374,6 +380,15 @@ export class DocumentCompletionInfo {
       luaObjectCompletionInfo.identifierInfo = identifierInfo;
       if (identifierInfo.members) {
         for (let member of identifierInfo.members) {
+          let completionInfoForMember = completionInfo.getDocumentCompletionInfoForIdentifierInfo(member);
+          if (member.initializeParseNode && member.initializeParseNode instanceof FunctionDeclaration) {
+            let luaFuncCompletion = completionInfoForMember.functionDeclarationToLuaFunctionCompletion(member.initializeParseNode);
+            if (luaFuncCompletion) {
+              luaFuncCompletion.identifierInfo = member;
+              luaObjectCompletionInfo.functions.push(luaFuncCompletion);
+              continue;
+            }
+          }
           luaObjectCompletionInfo.objects.push(identifierInfoToLuaObjectCompletionInfoRecursive(member, luaObjectCompletionInfo));
         }
       }
@@ -399,8 +414,13 @@ export class DocumentCompletionInfo {
       // if this identifier is a function (initialized in a function declaration as its identifier, not as a param or something else!)
       if (identifierInfo && identifierInfo.initializeParseNode && identifierInfo.initializeParseNode instanceof FunctionDeclaration
         && identifierInfo.identifier === identifierInfo.initializeParseNode.identifier) {
-      return this.functionDeclarationToLuaFunctionCompletion(identifierInfo.initializeParseNode);
-    }
+        let completionInfoForIdentifierInfo = this.getDocumentCompletionInfoForIdentifierInfo(identifierInfo);
+        let funcCompletion = completionInfoForIdentifierInfo.functionDeclarationToLuaFunctionCompletion(identifierInfo.initializeParseNode);
+        if (funcCompletion) {
+          funcCompletion.identifierInfo = identifierInfo;
+        }
+        return funcCompletion;
+      }
       let identifierType = this.getIdentifierTypeForIdentifierInfo(identifierInfo, identifier.name);
       if (identifierType !== undefined) {
         return identifierType !== "" ? helpCompletionInfo.findMacroClassInfo(identifierType) : undefined;

@@ -180,6 +180,8 @@ class SEDLua implements vscode.CompletionItemProvider, vscode.DefinitionProvider
       identifierInfo = expressionInfo;
     } else if (expressionInfo instanceof LuaObjectCompletionInfo) {
       identifierInfo = expressionInfo.identifierInfo;
+    } else if (expressionInfo instanceof LuaFunctionCompletionInfo) {
+      identifierInfo = expressionInfo.identifierInfo;
     }
     if (!identifierInfo || !identifierInfo.identifier) {
       return undefined;
