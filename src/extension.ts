@@ -173,32 +173,14 @@ class SEDLua implements vscode.CompletionItemProvider, vscode.DefinitionProvider
       return undefined;
     }
 
-    let wordAtPositon = document.getText(wordRangeAtPosition);
-    if (!wordAtPositon) {
-      return undefined;
-    }
-    if (!token.isIdentifier(wordAtPositon)) {
-      return;
-    }
-    if (iToken > 0) {
-      let tokenBefore = completionInfo.getTokenByIndex(iToken - 1);
-      // member definition is currently unsupported
-      if (tokenBefore.isPunctuator('.') || tokenBefore.isPunctuator(':')) {
-        return undefined;
-      }
-    }
-    // if we have found a matching identifier at position, we can find its definition
+    // find identifier info at offset
     let identifierInfo: ScopedIdentifierInfo|undefined;
-    completionInfo.forEachLocalAtOffset(offset, (localIdentifierInfo: ScopedIdentifierInfo) => {
-      // (once it is found, ignore other identifiers from outer scope - most local scope is found first)
-      if (identifierInfo) {
-        return;
-      }
-      if (localIdentifierInfo.name === wordAtPositon) {
-        identifierInfo = localIdentifierInfo;
-      }
-    });
-
+    let expressionInfo = completionInfo.resolveMemberExpressionAtOffset(offset, true);
+    if (expressionInfo instanceof ScopedIdentifierInfo) {
+      identifierInfo = expressionInfo;
+    } else if (expressionInfo instanceof LuaObjectCompletionInfo) {
+      identifierInfo = expressionInfo.identifierInfo;
+    }
     if (!identifierInfo || !identifierInfo.identifier) {
       return undefined;
     }

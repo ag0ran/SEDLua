@@ -355,7 +355,7 @@ export class DocumentCompletionInfo {
     }
   }
     
-  resolveMemberExpressionRecursive(memberExpressionOrIdentifier: ParseNode|undefined):
+  resolveMemberExpressionRecursive(memberExpressionOrIdentifier: ParseNode|undefined, getIdentifierAsLuaObject?: boolean):
     MacroFuncCompletionInfo | CvarFunctionCompletionInfo | MacroClassCompletionInfo | LuaObjectCompletionInfo | LuaFunctionCompletionInfo | MacroClassEvent | undefined
   {
     function identifierInfoToLuaObjectCompletionInfoRecursive(identifierInfo: ScopedIdentifierInfo, baseObjectCompletionInfo?: LuaObjectCompletionInfo): LuaObjectCompletionInfo {
@@ -383,14 +383,15 @@ export class DocumentCompletionInfo {
     if (memberExpressionOrIdentifier instanceof Identifier) {
       let identifier: Identifier = memberExpressionOrIdentifier;
       let identifierInfo = this.getLocalIdentifierInfoAtOffset(identifier.loc.rangeStart + 1, identifier.name);
-      // if this identifier is a function (initialized in a function declaration as its identifier, not as a param or something else!)
-      if (identifierInfo && identifierInfo.initializeParseNode && identifierInfo.initializeParseNode instanceof FunctionDeclaration
-          && identifierInfo.identifier === identifierInfo.initializeParseNode.identifier) {
-        return this.functionDeclarationToLuaFunctionCompletion(identifierInfo.initializeParseNode);
-      }
-      if (identifierInfo && identifierInfo.members) {
+      // return identifier info as lua object if it has members (or we're forcing getting of lua object)
+      if (identifierInfo && (identifierInfo.members || getIdentifierAsLuaObject)) {
         return identifierInfoToLuaObjectCompletionInfoRecursive(identifierInfo);
       }
+      // if this identifier is a function (initialized in a function declaration as its identifier, not as a param or something else!)
+      if (identifierInfo && identifierInfo.initializeParseNode && identifierInfo.initializeParseNode instanceof FunctionDeclaration
+        && identifierInfo.identifier === identifierInfo.initializeParseNode.identifier) {
+      return this.functionDeclarationToLuaFunctionCompletion(identifierInfo.initializeParseNode);
+    }
       let identifierType = this.getIdentifierTypeForIdentifierInfo(identifierInfo, identifier.name);
       if (identifierType !== undefined) {
         return identifierType !== "" ? helpCompletionInfo.findMacroClassInfo(identifierType) : undefined;
@@ -401,7 +402,7 @@ export class DocumentCompletionInfo {
       return undefined;
     }
     let memberExpression: MemberExpression = memberExpressionOrIdentifier;
-    let baseExpressionValue = this.resolveMemberExpressionRecursive(memberExpression.base);
+    let baseExpressionValue = this.resolveMemberExpressionRecursive(memberExpression.base, getIdentifierAsLuaObject);
     if (!baseExpressionValue) {
       return undefined;
     }
@@ -425,8 +426,8 @@ export class DocumentCompletionInfo {
     }
   }
 
-  resolveMemberExpressionAtOffset(offset: number):
-  VariableInfo|MacroFuncCompletionInfo|CvarFunctionCompletionInfo|MacroClassCompletionInfo|LuaObjectCompletionInfo|LuaFunctionCompletionInfo|MacroClassEvent|undefined
+  resolveMemberExpressionAtOffset(offset: number, getIdentifierAsLuaObject?: boolean):
+  VariableInfo|MacroFuncCompletionInfo|CvarFunctionCompletionInfo|MacroClassCompletionInfo|LuaObjectCompletionInfo|LuaFunctionCompletionInfo|MacroClassEvent|ScopedIdentifierInfo|undefined
   {
     if (this.parseResults  === undefined || this.parseResults.parsedChunk === undefined) {
       return undefined;
@@ -471,7 +472,7 @@ export class DocumentCompletionInfo {
     this.parseResults.parsedChunk.visitChildren(findIdentifierOrMemberExpressionVisitor);
 
     if (identifierOrMemberExpression) {
-      return this.resolveMemberExpressionRecursive(identifierOrMemberExpression);
+      return this.resolveMemberExpressionRecursive(identifierOrMemberExpression, getIdentifierAsLuaObject);
     }
 
     return undefined;
@@ -879,7 +880,7 @@ function resolveIdentifierTypeFromInitialization(identifierInfo: ScopedIdentifie
 }
 
 function resolveExpressionType(expression: Expression, completionInfo: DocumentCompletionInfo) {
-  function resolveType(inType: VariableInfo|MacroFuncCompletionInfo|CvarFunctionCompletionInfo|MacroClassCompletionInfo|LuaObjectCompletionInfo|LuaFunctionCompletionInfo|MacroClassEvent|undefined): string|undefined
+  function resolveType(inType: VariableInfo|MacroFuncCompletionInfo|CvarFunctionCompletionInfo|MacroClassCompletionInfo|LuaObjectCompletionInfo|LuaFunctionCompletionInfo|MacroClassEvent|ScopedIdentifierInfo|undefined): string|undefined
   {
     function extractCppType(cppType: string) {
       {
@@ -910,6 +911,8 @@ function resolveExpressionType(expression: Expression, completionInfo: DocumentC
       return extractCppType(inType.returnType);
     } else if (inType instanceof MacroClassCompletionInfo) {
       return inType.name;
+    } else if (inType instanceof ScopedIdentifierInfo) {
+      return inType.type;
     } else if (inType instanceof LuaObjectCompletionInfo) {
       if (inType.identifierInfo) {
         return inType.identifierInfo.type;
