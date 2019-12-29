@@ -184,7 +184,15 @@ class SEDLua implements vscode.CompletionItemProvider, vscode.DefinitionProvider
     if (!identifierInfo || !identifierInfo.identifier) {
       return undefined;
     }
-    let def = new vscode.Location(document.uri, getParseNodeStartPosition(identifierInfo.identifier.loc));
+
+    let locationUri;
+    if (identifierInfo.definedScriptPath) {
+      locationUri = seFilesystem.softPathToUri(identifierInfo.definedScriptPath);
+    } else {
+      locationUri = document.uri;
+    }
+
+    let def = new vscode.Location(locationUri, getParseNodeStartPosition(identifierInfo.identifier.loc));
     return def;
   }
   

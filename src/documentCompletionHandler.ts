@@ -1,7 +1,7 @@
 import { LuaToken, LuaTokenType } from './luaLexer';
 import { parseLuaSource, LuaParseResults, ParseNode, Comment, MemberExpression, Identifier,
   ParseNodeVisitResult, visitParseNodes, CallExpression, FunctionDeclaration, ForNumericStatement,
-  ForGenericStatement, ScopedIdentifierInfo, Block, LocalStatement, Expression, ParseNodeLocation, ElseifClause, VarargLiteral, AssignmentStatement } from './luaParser';
+  ForGenericStatement, ScopedIdentifierInfo, Block, LocalStatement, Expression, ParseNodeLocation, StringLiteral, VarargLiteral, AssignmentStatement, ReturnStatement } from './luaParser';
 import * as vscode from 'vscode';
 import { helpCompletionInfo, MacroFuncCompletionInfo, CvarFunctionCompletionInfo, MacroClassCompletionInfo,
   LuaObjectCompletionInfo, LuaFunctionCompletionInfo, extractLuaParamByIndex, extractMacroParamByIndex,
@@ -121,6 +121,15 @@ export class DocumentCompletionInfo {
     }
     return commentTokenBefore;
   }
+  getDocumentCompletionInfoForIdentifierInfo(identifierInfo: ScopedIdentifierInfo) {
+    if (identifierInfo.definedScriptPath) {
+      let completionInfo = documentCompletionInfos.get(identifierInfo.definedScriptPath);
+      if (completionInfo) {
+        return completionInfo;
+      }
+    }
+    return this;
+  }
   // Returns string showing the initialization of the identifier (including optional comment directly above).
   getIdentifierDefinitionString(identifierInfo: ScopedIdentifierInfo): string|undefined {
     let initParseNode = identifierInfo.initializeParseNode;
@@ -128,11 +137,11 @@ export class DocumentCompletionInfo {
       return undefined;
     }
     let locInit = initParseNode.loc;
+    let completionInfo = this.getDocumentCompletionInfoForIdentifierInfo(identifierInfo);
     // it makes sense to include the token before the identifier in case of local statement or function declaration
-    let commentTokenBefore = this.getCommentTokenBeforeInitParseNode(initParseNode);
+    let commentTokenBefore = completionInfo.getCommentTokenBeforeInitParseNode(initParseNode);
     let defStart = locInit.rangeStart;
     let defEnd = locInit.rangeEnd;
-    let completionInfo = this;
     function updateDefEndBeforeBody(body: Block|undefined, tokenType: LuaTokenType, tokenRawValue: string) {
       if (!body) {
         return;
@@ -162,7 +171,7 @@ export class DocumentCompletionInfo {
       updateDefEndBeforeBody(forStatement.body, LuaTokenType.Keyword, "do");
     }
     let defString = commentTokenBefore ? commentTokenBefore.rawValue + "\n" : "";
-    defString += this.documentText.substring(defStart, defEnd);
+    defString += completionInfo.documentText.substring(defStart, defEnd);
     return defString;
   }
   // Calls the provided callback for all local variables available in block at given offset.
@@ -582,6 +591,19 @@ export class DocumentCompletionInfo {
     }
     return lastInfo;
   }
+
+  addErrorAtLocation(loc: ParseNodeLocation, message: string) {
+    this.errors = this.errors || [];
+    this.errors.push(new DocumentParsingError(locationToErrorRange(loc), message));
+  }
+  addWarningAtLocation(loc: ParseNodeLocation, message: string) {
+    this.warnings = this.warnings || [];
+    this.warnings.push(new DocumentParsingError(locationToErrorRange(loc), message));
+  }
+}
+
+function locationToErrorRange(loc: ParseNodeLocation) {
+  return [loc.startLine - 1, loc.startCol - 1, loc.endLine - 1, loc.endCol - 1];
 }
 
 export class DocumentParsingError {
@@ -595,7 +617,7 @@ export class DocumentParsingError {
 
 let documentCompletionInfos: Map<string, DocumentCompletionInfo> = new Map<string, DocumentCompletionInfo>();
 
-export function getDocumentCompletionInfoForSoftPathAndText(documentText: string, documentSoftPath: string): DocumentCompletionInfo {
+export function getDocumentCompletionInfoForSoftPathAndText(documentSoftPath: string, documentText: string): DocumentCompletionInfo {
   let completionInfo = documentCompletionInfos.get(documentSoftPath);
   if (completionInfo && completionInfo.documentText === documentText) {
     return completionInfo;
@@ -607,7 +629,7 @@ export function getDocumentCompletionInfoForSoftPathAndText(documentText: string
 
 export function getDocumentCompletionInfo(document: vscode.TextDocument): DocumentCompletionInfo {
   let documentSoftPath = seFilesystem.uriToSoftpath(document.uri);
-  return getDocumentCompletionInfoForSoftPathAndText(document.getText(), documentSoftPath);
+  return getDocumentCompletionInfoForSoftPathAndText(documentSoftPath, document.getText());
 }
 
 function parseDocument(documentText: string, documentSoftPath: string): DocumentCompletionInfo {
@@ -847,6 +869,72 @@ function getTokenIndexAtOffset(tokens: Array<LuaToken>, offset: number): number 
   return tokens.length - 1;
 }
 
+function resolveImportOrDofileOnIdentifierInfo(identifierInfo: ScopedIdentifierInfo, completionInfo: DocumentCompletionInfo, identifierInit: Expression): boolean {
+  // interested only in initialization with calls to "import" and "dofile" functions
+  if (!(identifierInit instanceof CallExpression) || !(identifierInit.base instanceof Identifier) || (identifierInit.base.name !== "import" && identifierInit.base.name !== "dofile")) {
+    return false;
+  }
+  if (identifierInit.args.length < 1) {
+    completionInfo.addWarningAtLocation(identifierInit.loc, 'Expected string with valid script path as first argument');
+    return true;
+  }
+  let scriptPathArg = identifierInit.args[0];
+  if (!(scriptPathArg instanceof StringLiteral)) {
+    completionInfo.addWarningAtLocation(scriptPathArg.loc, 'Expected string with valid script path as first argument');
+    return true;
+  }
+
+  let scriptPath = scriptPathArg.value;
+  if (!scriptPath.match(/.lua$/i)) {
+    completionInfo.addWarningAtLocation(scriptPathArg.loc, 'Expected path ending in ".lua"');
+    return true;
+  }
+  // we need to process this script and find the return value
+  let scriptCompletionInfo = documentCompletionInfos.get(scriptPath);
+  if (!scriptCompletionInfo) {
+    let scriptText;
+    try {
+      scriptText = seFilesystem.readFileUtf8(seFilesystem.softPathToHardPath(scriptPath));
+    } catch(err) {
+      completionInfo.addWarningAtLocation(scriptPathArg.loc, `Error reading ${scriptPath}`);
+      return true;
+    }
+    scriptCompletionInfo = getDocumentCompletionInfoForSoftPathAndText(scriptPath, scriptText);
+  }
+  if (!scriptCompletionInfo.parseResults || !scriptCompletionInfo.parseResults.parsedChunk) {
+    return true;
+  }
+  // return is the last statement in the chunk
+  let chunkStatements = scriptCompletionInfo.parseResults.parsedChunk.body.statements;
+  if (chunkStatements.length === 0) {
+    return true;
+  }
+  let lastStatement = chunkStatements[chunkStatements.length - 1];
+  if (!(lastStatement instanceof ReturnStatement) || lastStatement.args.length < 1) {
+    return true;
+  }
+
+  let returnedArg = lastStatement.args[0];
+  // for now handling only returned identifier and his members
+  if (returnedArg instanceof Identifier) {
+    let returnedIdentifierInfo = scriptCompletionInfo.getLocalIdentifierInfoAtOffset(returnedArg.loc.rangeStart + 1, returnedArg.name);
+    if (!returnedIdentifierInfo) {
+      return true;
+    }
+    // copy members to identifier info so we can get them as members into our object
+    if (returnedIdentifierInfo.members) {
+      identifierInfo.members = [];
+      for (let member of returnedIdentifierInfo.members) {
+        // we must set the script path where member was defined, otherwise we may not jump to definition
+        member.definedScriptPath = scriptPath;
+        identifierInfo.members.push(member);
+      }
+    }
+    return true;
+  }
+  return true;
+}
+
 function resolveIdentifierTypeFromInitialization(identifierInfo: ScopedIdentifierInfo, completionInfo: DocumentCompletionInfo): string|undefined {
   if (!identifierInfo.initializeParseNode) {
     return undefined;
@@ -866,6 +954,11 @@ function resolveIdentifierTypeFromInitialization(identifierInfo: ScopedIdentifie
       let identifierInit = statement.init[identifierVarIndex];
       if (!identifierInit) {
         return undefined;
+      }
+      // if identifier is initialized through import or dofile
+      if (resolveImportOrDofileOnIdentifierInfo(identifierInfo, completionInfo, identifierInit)) {
+        // then type is handled already
+        return identifierInfo.type;
       }
       let expressionType = resolveExpressionType(identifierInit, completionInfo);
       return expressionType;

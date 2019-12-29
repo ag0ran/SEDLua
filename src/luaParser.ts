@@ -810,6 +810,8 @@ export class ScopedIdentifierInfo {
   typeHinted?: boolean;
   members?: Array<ScopedIdentifierInfo>;
   base?: ScopedIdentifierInfo;
+  // Soft path of the script where member was defined
+  definedScriptPath?: string;
 
   getMemberByName(name: string): ScopedIdentifierInfo|undefined {
     return this.members ? this.members.find((value) => value.name === name) : undefined;
