@@ -850,6 +850,11 @@ function processMemberInitialization(completionInfo: DocumentCompletionInfo) {
         }
       }
       return ParseNodeVisitResult.SkipNode;
+    } else if (parseNode instanceof FunctionDeclaration) {
+      let functionDeclaration: FunctionDeclaration = parseNode;
+      if (functionDeclaration.identifier instanceof MemberExpression) {
+        getOrCreateIndexedIdentifierInfo(functionDeclaration.identifier, functionDeclaration);
+      }
     }
     return ParseNodeVisitResult.Continue;
   }

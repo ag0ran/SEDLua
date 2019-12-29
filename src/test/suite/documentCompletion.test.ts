@@ -305,13 +305,13 @@ async function testMemberAssignments()
       assert(completionInfo.parseResults);
 
       {
-        let offset = textDocument.offsetAt(new vscode.Position(9, 13));
+        let offset = textDocument.offsetAt(new vscode.Position(11, 13));
         let localsFinder = new LocalsFinder(offset, completionInfo);
         let tInfo = localsFinder.getIdentifierInfo("t");
         assert(tInfo);
         tInfo = tInfo!;
         assert(tInfo.members);
-        assert(tInfo.members!.length === 3);
+        assert(tInfo.members!.length === 4);
         {
           let memberA = tInfo.getMemberByName("a")!;
           assert(memberA);
@@ -365,6 +365,14 @@ async function testMemberAssignments()
           assert(!memberCee.members);
           assert(memberCee.type === "CDerivedSampleClass");
           assert(memberCee.typeHinted);
+        }
+        {
+          let memberFunc = tInfo.getMemberByName("func")!;
+          assert(memberFunc);
+          assert(memberFunc.name === "func");
+          assert(!memberFunc.members);
+          assert(!memberFunc.type);
+          assert(!memberFunc.typeHinted);
         }
         assert(!tInfo.getMemberByName("nonExistant"));
       }
