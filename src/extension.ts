@@ -3,7 +3,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as seFilesystem from './sefilesystem';
-import {DocumentCompletionHandler, DocumentCompletionInfo, isMemberIndexingToken, isMemberIndexingChar} from './documentCompletionHandler';
+import {getDocumentCompletionInfo, DocumentCompletionInfo, isMemberIndexingToken, isMemberIndexingChar} from './documentCompletionHandler';
 import {helpCompletionInfo, loadHelpCompletionInfo, HelpCompletionInfo, MacroFuncCompletionInfo, CvarFunctionCompletionInfo,
   CvarCompletionInfo, MacroClassCompletionInfo, LuaFunctionCompletionInfo, LuaObjectCompletionInfo, extractLuaParamByIndex, extractMacroParamByIndex, MacroClassEvent} from './seHelp';
 import {log} from "./log";
@@ -98,10 +98,7 @@ class SEDLua implements vscode.CompletionItemProvider, vscode.DefinitionProvider
   provideSignatureHelp(document: vscode.TextDocument, position: vscode.Position,
     token: vscode.CancellationToken, context: vscode.SignatureHelpContext): vscode.ProviderResult<vscode.SignatureHelp>
   {
-    let completionInfo = this.getDocumentCompletionInfo(document);
-    if (!completionInfo) {
-      return undefined;
-    }
+    let completionInfo = getDocumentCompletionInfo(document);
 
     let offset = document.offsetAt(position);
     let functionCallInfo = completionInfo.getFunctionCallInfoAtOffset(offset);
@@ -154,10 +151,7 @@ class SEDLua implements vscode.CompletionItemProvider, vscode.DefinitionProvider
   }
 
   provideDefinition(document: vscode.TextDocument, position: vscode.Position, cancellationToken: vscode.CancellationToken): vscode.ProviderResult<vscode.Definition | vscode.DefinitionLink[]> {
-    let completionInfo = this.getDocumentCompletionInfo(document);
-    if (!completionInfo) {
-      return undefined;
-    }
+    let completionInfo = getDocumentCompletionInfo(document);
     let wordRangeAtPosition = document.getWordRangeAtPosition(position);
     if (!wordRangeAtPosition) {
       return undefined;
@@ -213,10 +207,7 @@ class SEDLua implements vscode.CompletionItemProvider, vscode.DefinitionProvider
   }
   
   provideHover(document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken): vscode.ProviderResult<vscode.Hover> {
-    let completionInfo = this.getDocumentCompletionInfo(document);
-    if (!completionInfo) {
-      return undefined;
-    }
+    let completionInfo = getDocumentCompletionInfo(document);
     let wordRange = document.getWordRangeAtPosition(position);
     if (!wordRange) {
       return undefined;
@@ -341,27 +332,6 @@ class SEDLua implements vscode.CompletionItemProvider, vscode.DefinitionProvider
     this.workspaceCheckTimeoutId = setInterval(this.workspaceCheckTimeoutCallback.bind(this), 1000);
   }
 
-  private getDocumentCompletionInfo(document: vscode.TextDocument): DocumentCompletionInfo|undefined {
-    let documentCompletionHandler = this.getOrCreateDocumentCompletionHandler(document);
-    if (documentCompletionHandler) {
-      return documentCompletionHandler.getCompletionInfo();
-    }
-    return undefined;
-  }
-
-  private getOrCreateDocumentCompletionHandler(document: vscode.TextDocument): DocumentCompletionHandler|undefined {
-    if (document.fileName && document.fileName !== "") {
-      let completionHandler = this.documentCompletionHandlers.get(document.fileName);
-      if (!completionHandler) {
-        completionHandler = new DocumentCompletionHandler(document);
-        this.documentCompletionHandlers.set(document.fileName, completionHandler);
-      }
-      return completionHandler;
-    } else {
-      return undefined;
-    }
-  }
-
   private showDocumentation() {
     let webviewPanel = vscode.window.createWebviewPanel("landingPage",
     "SEDLua documentation", vscode.ViewColumn.One,
@@ -395,7 +365,7 @@ class SEDLua implements vscode.CompletionItemProvider, vscode.DefinitionProvider
     if (!this.isDocumentSupported(document)) {
       return;
     }
-    this.getOrCreateDocumentCompletionHandler(document);
+    getDocumentCompletionInfo(document);
   }
 
   private async onDidChangeTextDocument(e: vscode.TextDocumentChangeEvent) {
@@ -416,16 +386,7 @@ class SEDLua implements vscode.CompletionItemProvider, vscode.DefinitionProvider
         await vscode.commands.executeCommand('workbench.action.files.revert');
       }
     }
-
-    let documentCompletionHandler = this.getOrCreateDocumentCompletionHandler(e.document);
-    if (!documentCompletionHandler) {
-      return;
-    }
-    documentCompletionHandler.onDocumentChanged(e);
-    let documentCompletionInfo = await documentCompletionHandler.getCompletionInfoNow();
-    if (!documentCompletionInfo) {
-      return;
-    }
+    let documentCompletionInfo = await getDocumentCompletionInfo(e.document);
     // update diagnostics (to error or empty)
     let diagnostics: Array<vscode.Diagnostic> = [];
     if (documentCompletionInfo.error) {
@@ -470,9 +431,6 @@ class SEDLua implements vscode.CompletionItemProvider, vscode.DefinitionProvider
     }
     return "";
   }
-
-  // holds completion handlers per document path
-  private documentCompletionHandlers: Map<string, DocumentCompletionHandler> = new Map<string, DocumentCompletionHandler>();
 
   private workspaceScripts : Set<string> = new Set<string>();
 
@@ -576,10 +534,7 @@ class SEDLua implements vscode.CompletionItemProvider, vscode.DefinitionProvider
       token: vscode.CancellationToken, context: vscode.CompletionContext
       ): vscode.ProviderResult<vscode.CompletionItem[] | vscode.CompletionList> {
 
-    let completionInfo = this.getDocumentCompletionInfo(document);
-    if (!completionInfo) {
-      return null;
-    }
+    let completionInfo = getDocumentCompletionInfo(document);
 
     // try to find a token at current offset
     let currentOffset = document.offsetAt(position);

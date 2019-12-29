@@ -30,7 +30,7 @@ interface FuncCallParamInfo {
 }
 
 export class DocumentCompletionInfo {
-  constructor (documentText: string, documentSofPath?: string) {
+  constructor (documentText: string, documentSofPath: string) {
     this.documentText = documentText;
     this.documentSoftPath = documentSofPath || "";
   }
@@ -592,132 +592,129 @@ export class DocumentParsingError {
   message: string = "";
 }
 
-export class DocumentCompletionHandler {
-  private scriptSoftPath: string;
-  
-  constructor(document: vscode.TextDocument) {
-    this.scriptSoftPath = seFilesystem.uriToSoftpath(document.uri);
-    this.parseDocument(document.getText(), this.scriptSoftPath);
-  }
-  getCompletionInfo(): DocumentCompletionInfo|undefined {
-    return this.currentCompletionInfo;
-  }
-  getCompletionInfoNow(): DocumentCompletionInfo|undefined {
-    return this.currentCompletionInfo;
-  }
-  async onDocumentChanged(e: vscode.TextDocumentChangeEvent) {
-    await this.parseDocument(e.document.getText(), seFilesystem.uriToSoftpath(e.document.uri));
-  }
+let documentCompletionInfos: Map<string, DocumentCompletionInfo> = new Map<string, DocumentCompletionInfo>();
 
-  private async parseDocument(documentText: string, documentSoftPath?: string) {
-    let result = new DocumentCompletionInfo(documentText, documentSoftPath);
-    function processTokens(tokens: Array<LuaToken>)
+export function getDocumentCompletionInfoForSoftPathAndText(documentText: string, documentSoftPath: string): DocumentCompletionInfo {
+  let completionInfo = documentCompletionInfos.get(documentSoftPath);
+  if (completionInfo && completionInfo.documentText === documentText) {
+    return completionInfo;
+  }
+  completionInfo = parseDocument(documentText, documentSoftPath);
+  documentCompletionInfos.set(documentSoftPath, completionInfo);
+  return completionInfo;
+}
+
+export function getDocumentCompletionInfo(document: vscode.TextDocument): DocumentCompletionInfo {
+  let documentSoftPath = seFilesystem.uriToSoftpath(document.uri);
+  return getDocumentCompletionInfoForSoftPathAndText(document.getText(), documentSoftPath);
+}
+
+function parseDocument(documentText: string, documentSoftPath: string): DocumentCompletionInfo {
+  let result = new DocumentCompletionInfo(documentText, documentSoftPath);
+  function processTokens(tokens: Array<LuaToken>) {
+    // if first token in a file is a comment, it may signal the hint mode for the script
     {
-      // if first token in a file is a comment, it may signal the hint mode for the script
-      {
-        let firstToken = tokens[0];
-        let hintModeExplicitelySet = false;
-        if (firstToken && firstToken.type === LuaTokenType.Comment) {
-          const hintModePrefix = 'HINT_MODE!';
-          let commentValue = (firstToken.value as string).trim();
-          if (commentValue.startsWith(hintModePrefix)) {
-            let hintModes = commentValue.substr(hintModePrefix.length);
-            const cvarHintModeKeyword = 'cvar!';
-            const macroHintModeKeyword = 'macro!';
+      let firstToken = tokens[0];
+      let hintModeExplicitelySet = false;
+      if (firstToken && firstToken.type === LuaTokenType.Comment) {
+        const hintModePrefix = 'HINT_MODE!';
+        let commentValue = (firstToken.value as string).trim();
+        if (commentValue.startsWith(hintModePrefix)) {
+          let hintModes = commentValue.substr(hintModePrefix.length);
+          const cvarHintModeKeyword = 'cvar!';
+          const macroHintModeKeyword = 'macro!';
 
-            let cvarHintMode = false;
-            let macroHintMode = false;
+          let cvarHintMode = false;
+          let macroHintMode = false;
 
-            while (true) {
-              if (hintModes.startsWith(cvarHintModeKeyword)) {
-                hintModes = hintModes.substr(cvarHintModeKeyword.length);
-                cvarHintMode = true;
-              } else if (hintModes.startsWith(macroHintModeKeyword)) {
-                hintModes = hintModes.substr(macroHintModeKeyword.length);
-                macroHintMode = true;
-              } else {
-                break;
-              }
-            }
-            // if some unexpected word remains, this is considered an error in hint mode specifier
-            let remainingModes = hintModes.match(/^\w+/);
-            if (remainingModes) {
-              hintModeExplicitelySet = false;
-              if (!result.warnings) {
-                result.warnings = [];
-              }
-              let errorRange = [firstToken.startLine - 1, firstToken.startCol - 1, firstToken.endLine - 1, firstToken.endCol - 1];
-              result.warnings.push(new DocumentParsingError(errorRange, `Error in hint mode specification!\nExpected values: "--HINT_MODE!cvar!macro!" or "--HINT_MODE!cvar!" or "--HINT_MODE!macro!"`));
-              hintModeExplicitelySet = false;
+          while (true) {
+            if (hintModes.startsWith(cvarHintModeKeyword)) {
+              hintModes = hintModes.substr(cvarHintModeKeyword.length);
+              cvarHintMode = true;
+            } else if (hintModes.startsWith(macroHintModeKeyword)) {
+              hintModes = hintModes.substr(macroHintModeKeyword.length);
+              macroHintMode = true;
             } else {
-              hintModeExplicitelySet = true;
-              result.cvarHintMode = cvarHintMode;
-              result.macroHintMode = macroHintMode;
+              break;
             }
           }
-    }
-        // if hint mode is not explicitely set, we will consider world scripts in macro mode only
-        if (!hintModeExplicitelySet) {
-          // cvar hint mode is off by default for world scripts
-          let isWorldScript = !!worldScriptsStorage.getVarInfosForScript(result.documentSoftPath);
-          result.cvarHintMode = !isWorldScript;
-          // macro mode is always allowed when not specifically hinted
-          result.macroHintMode = true;
+          // if some unexpected word remains, this is considered an error in hint mode specifier
+          let remainingModes = hintModes.match(/^\w+/);
+          if (remainingModes) {
+            hintModeExplicitelySet = false;
+            if (!result.warnings) {
+              result.warnings = [];
+            }
+            let errorRange = [firstToken.startLine - 1, firstToken.startCol - 1, firstToken.endLine - 1, firstToken.endCol - 1];
+            result.warnings.push(new DocumentParsingError(errorRange, `Error in hint mode specification!\nExpected values: "--HINT_MODE!cvar!macro!" or "--HINT_MODE!cvar!" or "--HINT_MODE!macro!"`));
+            hintModeExplicitelySet = false;
+          } else {
+            hintModeExplicitelySet = true;
+            result.cvarHintMode = cvarHintMode;
+            result.macroHintMode = macroHintMode;
+          }
         }
       }
+      // if hint mode is not explicitely set, we will consider world scripts in macro mode only
+      if (!hintModeExplicitelySet) {
+        // cvar hint mode is off by default for world scripts
+        let isWorldScript = !!worldScriptsStorage.getVarInfosForScript(result.documentSoftPath);
+        result.cvarHintMode = !isWorldScript;
+        // macro mode is always allowed when not specifically hinted
+        result.macroHintMode = true;
+      }
+    }
 
-      for (let token of tokens) {
-        // comment tokens can hold type hints
-        if (token.type === LuaTokenType.Comment) {
-          let comment = token.value as string;
-          // we have to be careful not to match a commented out call of a member function, therefore only whitespace is allowed before the end of the comment
-          let commentMatch = comment.match(/(\w+)\s*:\s*(\w+)\s*$/);
-          if (commentMatch) {
-            let varName: string = commentMatch[1];
-            let varType: string = commentMatch[2];
-            if (helpCompletionInfo.findMacroClassInfo(varType)) {
-              result.hintedVariables.set(varName, new VariableInfo(varType));
-            } else {
-              if (!result.warnings) {
-                result.warnings = [];
-              }
-              let errorRange = [token.startLine - 1, token.startCol - 1, token.endLine - 1, token.endCol - 1];
-              let errorMessage = `unrecognized type ${varType}`;
-              function rangesEqual(rangeA: number[], rangeB: number[]) {
-                return rangeA.length === 4 && rangeA.length === rangeB.length && rangeA[0] === rangeB[0]
-                  && rangeA[1] === rangeB[1] && rangeA[2] === rangeB[2] && rangeA[3] === rangeB[3];
-              }
-              if (!result.warnings.find((docParsingError) => docParsingError.message === errorMessage && rangesEqual(docParsingError.range, errorRange))) {
-                result.warnings.push(new DocumentParsingError(errorRange, errorMessage));
-              }
+    for (let token of tokens) {
+      // comment tokens can hold type hints
+      if (token.type === LuaTokenType.Comment) {
+        let comment = token.value as string;
+        // we have to be careful not to match a commented out call of a member function, therefore only whitespace is allowed before the end of the comment
+        let commentMatch = comment.match(/(\w+)\s*:\s*(\w+)\s*$/);
+        if (commentMatch) {
+          let varName: string = commentMatch[1];
+          let varType: string = commentMatch[2];
+          if (helpCompletionInfo.findMacroClassInfo(varType)) {
+            result.hintedVariables.set(varName, new VariableInfo(varType));
+          } else {
+            if (!result.warnings) {
+              result.warnings = [];
+            }
+            let errorRange = [token.startLine - 1, token.startCol - 1, token.endLine - 1, token.endCol - 1];
+            let errorMessage = `unrecognized type ${varType}`;
+            function rangesEqual(rangeA: number[], rangeB: number[]) {
+              return rangeA.length === 4 && rangeA.length === rangeB.length && rangeA[0] === rangeB[0]
+                && rangeA[1] === rangeB[1] && rangeA[2] === rangeB[2] && rangeA[3] === rangeB[3];
+            }
+            if (!result.warnings.find((docParsingError) => docParsingError.message === errorMessage && rangesEqual(docParsingError.range, errorRange))) {
+              result.warnings.push(new DocumentParsingError(errorRange, errorMessage));
             }
           }
         }
       }
     }
-    try {
-      let parseResults = parseLuaSource(documentText);
-      result.parseResults = parseResults;
-      result.tokens = parseResults.tokens;
-      processTokens(result.tokens);
-      processScopedIdentifiers(result);
-      processMemberInitialization(result);
-
-      if (parseResults.errors !== undefined) {
-        result.errors = [];
-        for (let err of parseResults.errors) {
-          result.errors.push(new DocumentParsingError([err.line - 1, err.column - 1, err.endLine - 1, err.endColumn - 1], err.message));
-        }
-      }
-    } catch (err) {
-      if (result.errors === undefined) {
-        result.errors = [];
-      }
-      result.errors.push(new DocumentParsingError([0, 0, 0, 0], `Unexpected lua parsing error: ${err.message}`));
-    }
-    this.currentCompletionInfo = result;
   }
-  private currentCompletionInfo: DocumentCompletionInfo|undefined = undefined;
+  try {
+    let parseResults = parseLuaSource(documentText);
+    result.parseResults = parseResults;
+    result.tokens = parseResults.tokens;
+    processTokens(result.tokens);
+    processScopedIdentifiers(result);
+    processMemberInitialization(result);
+
+    if (parseResults.errors !== undefined) {
+      result.errors = [];
+      for (let err of parseResults.errors) {
+        result.errors.push(new DocumentParsingError([err.line - 1, err.column - 1, err.endLine - 1, err.endColumn - 1], err.message));
+      }
+    }
+  } catch (err) {
+    if (result.errors === undefined) {
+      result.errors = [];
+    }
+    result.errors.push(new DocumentParsingError([0, 0, 0, 0], `Unexpected lua parsing error: ${err.message}`));
+  }
+  return result;
 }
 
 export function isMemberIndexingChar(char: string) {return char === '.' || char === ':';}

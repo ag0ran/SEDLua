@@ -2,7 +2,7 @@ import * as assert from 'assert';
 
 import * as vscode from 'vscode';
 import {LuaTokenType} from '../../luaLexer';
-import {DocumentCompletionHandler, DocumentCompletionInfo} from '../../documentCompletionHandler';
+import {DocumentCompletionInfo, getDocumentCompletionInfo} from '../../documentCompletionHandler';
 import {helpCompletionInfo, HelpCompletionInfo, MacroFuncCompletionInfo, loadHelpCompletionInfo, LuaFunctionCompletionInfo} from '../../seHelp';
 import fs = require('fs');
 import { softPathToUri, softPathToHardPath } from '../../sefilesystem';
@@ -14,10 +14,7 @@ async function testFunctionCallInfo() {
       let sampleScriptUri = softPathToUri("Content/SignatureTestScript.lua");
       let textDocument = await vscode.workspace.openTextDocument(sampleScriptUri);  
       assert(textDocument, "Unable to open document");
-      let documentCompletionHandler = new DocumentCompletionHandler(textDocument);
-      let completionInfo = documentCompletionHandler.getCompletionInfoNow();
-      assert(completionInfo, "Error getting completion info");
-      completionInfo = completionInfo!;
+      let completionInfo = getDocumentCompletionInfo(textDocument);
 
       function expectLuaFuncCompletionInfo(line: number, col: number, funcName: string, expectedParamIndex: number) {
         let functionCallInfo = completionInfo!.getFunctionCallInfoAtOffset(textDocument.offsetAt(new vscode.Position(line, col)));
@@ -137,10 +134,7 @@ async function testGlobals() {
       let sampleScriptUri = softPathToUri("Content/GlobalsAndLocals.lua");
       let textDocument = await vscode.workspace.openTextDocument(sampleScriptUri);  
       assert(textDocument, "Unable to open document");
-      let documentCompletionHandler = new DocumentCompletionHandler(textDocument);
-      let completionInfo = documentCompletionHandler.getCompletionInfoNow();
-      assert(completionInfo, "Error getting completion info");
-      completionInfo = completionInfo!;
+      let completionInfo = getDocumentCompletionInfo(textDocument);
       assert(completionInfo.parseResults);
       let parseResults = completionInfo.parseResults!;
       // there should be 2 globals total
@@ -224,12 +218,8 @@ async function testScopedTypes()
       let sampleScriptUri = softPathToUri("Content/VarTypes.lua");
       let textDocument = await vscode.workspace.openTextDocument(sampleScriptUri);  
       assert(textDocument, "Unable to open document");
-      let documentCompletionHandler = new DocumentCompletionHandler(textDocument);
-      let completionInfo = documentCompletionHandler.getCompletionInfoNow();
-      assert(completionInfo, "Error getting completion info");
-      completionInfo = completionInfo!;
+      let completionInfo = getDocumentCompletionInfo(textDocument);
       assert(completionInfo.parseResults);
-      let parseResults = completionInfo.parseResults!;
       // get var types
       {
         let offset = textDocument.offsetAt(new vscode.Position(3, 1));
@@ -277,10 +267,7 @@ async function testMemberExpressionWithinMemberExpression()
       let sampleScriptUri = softPathToUri("Content/MemberExpressionWithinMemberExpression.lua");
       let textDocument = await vscode.workspace.openTextDocument(sampleScriptUri);  
       assert(textDocument, "Unable to open document");
-      let documentCompletionHandler = new DocumentCompletionHandler(textDocument);
-      let completionInfo = documentCompletionHandler.getCompletionInfoNow();
-      assert(completionInfo, "Error getting completion info");
-      completionInfo = completionInfo!;
+      let completionInfo = getDocumentCompletionInfo(textDocument);
       assert(completionInfo.parseResults);
 
       // testing member function within member expression
@@ -314,10 +301,7 @@ async function testMemberAssignments()
       let sampleScriptUri = softPathToUri("Content/MemberAssignments.lua");
       let textDocument = await vscode.workspace.openTextDocument(sampleScriptUri);  
       assert(textDocument, "Unable to open document");
-      let documentCompletionHandler = new DocumentCompletionHandler(textDocument);
-      let completionInfo = documentCompletionHandler.getCompletionInfoNow();
-      assert(completionInfo, "Error getting completion info");
-      completionInfo = completionInfo!;
+      let completionInfo = getDocumentCompletionInfo(textDocument);
       assert(completionInfo.parseResults);
 
       {
