@@ -1,3 +1,5 @@
+- error when invalid token ! is encountered
+- cvar functions don't return macro class properly!
 - coloring of comments (they don't work when inside function declaration for some reason)
 - coloring of type comments
 - hints for built in types (Vector3f, QuatVect...)
