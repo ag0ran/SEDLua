@@ -550,14 +550,14 @@ export class TableKey implements ParseNode {
 }
 
 export class TableKeyString implements ParseNode {
-  constructor(key: string, value: Expression) {
+  constructor(key: Identifier, value: Expression) {
     this.type = 'TableKeyString';
     this.key = key;
     this.value = value;
   }
   type: string;
   loc: ParseNodeLocation = invalidParseNodeLoc;
-  key: string;
+  key: Identifier;
   value: Expression;
 
   // Visits all child nodes of this parse node. Visitor function and this function return whether visiting should continue, stop or skip node.
@@ -941,7 +941,7 @@ export function parseLuaSource(inputSource: string, onCreateNodeCallback?: OnCre
           moveToNextToken();
           let value = parseExpectedExpression();
           if (value) {
-            fields.push(finishNode(new TableKeyString(key.name, value)));
+            fields.push(finishNode(new TableKeyString(key, value)));
           }
         } else {
           let value = parseExpectedExpression();

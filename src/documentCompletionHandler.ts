@@ -1,7 +1,8 @@
 import { LuaToken, LuaTokenType } from './luaLexer';
 import { parseLuaSource, LuaParseResults, ParseNode, Comment, MemberExpression, Identifier,
   ParseNodeVisitResult, visitParseNodes, CallExpression, FunctionDeclaration, ForNumericStatement,
-  ForGenericStatement, ScopedIdentifierInfo, Block, LocalStatement, Expression, ParseNodeLocation, StringLiteral, VarargLiteral, AssignmentStatement, ReturnStatement } from './luaParser';
+  ForGenericStatement, ScopedIdentifierInfo, Block, LocalStatement, Expression, ParseNodeLocation, StringLiteral,
+  VarargLiteral, AssignmentStatement, ReturnStatement, TableConstructorExpression, TableKeyString } from './luaParser';
 import * as vscode from 'vscode';
 import { helpCompletionInfo, MacroFuncCompletionInfo, CvarFunctionCompletionInfo, MacroClassCompletionInfo,
   LuaObjectCompletionInfo, LuaFunctionCompletionInfo, extractLuaParamByIndex, extractMacroParamByIndex,
@@ -821,6 +822,16 @@ function processMemberInitialization(completionInfo: DocumentCompletionInfo) {
   if (!parseResults.parsedChunk) {
     return;
   }
+  function createMemberIdentifierInfo(baseIdentifierInfo: ScopedIdentifierInfo, identifier: Identifier, initParseNode: ParseNode): ScopedIdentifierInfo
+  {
+    let identifierInfo = new ScopedIdentifierInfo(identifier.name);
+    identifierInfo.identifier = identifier;
+    identifierInfo.base = baseIdentifierInfo;
+    identifierInfo.initializeParseNode = initParseNode;
+    baseIdentifierInfo.members = baseIdentifierInfo.members || [];
+    baseIdentifierInfo.members.push(identifierInfo);
+    return identifierInfo;
+  }
   function getOrCreateIndexedIdentifierInfo(memberExpressionOrIdentifier: MemberExpression|Identifier, initParseNode: ParseNode): ScopedIdentifierInfo|undefined {
     if (memberExpressionOrIdentifier instanceof Identifier) {
       let identifierInfo = completionInfo.getLocalIdentifierInfoAtOffset(memberExpressionOrIdentifier.loc.rangeStart + 1, memberExpressionOrIdentifier.name);
@@ -837,15 +848,21 @@ function processMemberInitialization(completionInfo: DocumentCompletionInfo) {
       if (identifierInfo) {
         return identifierInfo;
       }
-      identifierInfo = new ScopedIdentifierInfo(memberExpressionOrIdentifier.identifier.name);
-      identifierInfo.identifier = memberExpressionOrIdentifier.identifier;
-      identifierInfo.base = baseIdentifierInfo;
-      identifierInfo.initializeParseNode = initParseNode;
-      baseIdentifierInfo.members = baseIdentifierInfo.members || [];
-      baseIdentifierInfo.members.push(identifierInfo);
-      return identifierInfo;
+      return createMemberIdentifierInfo(baseIdentifierInfo, memberExpressionOrIdentifier.identifier, initParseNode);
     }
   }
+
+  function processTableConstructorExpressionsRecursive(baseIdentifierInfo: ScopedIdentifierInfo, tableConstructor: TableConstructorExpression) {
+    for (let field of tableConstructor.fields) {
+      if (field instanceof TableKeyString) {
+        let memberIdentifierInfo = createMemberIdentifierInfo(baseIdentifierInfo, field.key, field);
+        if (field.value instanceof TableConstructorExpression) {
+          processTableConstructorExpressionsRecursive(memberIdentifierInfo, field.value);
+        }
+      }
+    }
+  }
+
   // we will go through all assignments
   function goThroughAssignments(parseNode: ParseNode): ParseNodeVisitResult{
     if (parseNode instanceof AssignmentStatement) {
@@ -853,13 +870,17 @@ function processMemberInitialization(completionInfo: DocumentCompletionInfo) {
       for (let i = 0; i < assignmentStatement.variables.length; ++i) {
         let variable = assignmentStatement.variables[i];
         // skip assignment if valid assignment (init is not provided)
-        if (!assignmentStatement.init[i]) {
+        let varInit = assignmentStatement.init[i];
+        if (!varInit) {
           continue;
         }
         if (variable instanceof MemberExpression) {
           let identifierInfo = getOrCreateIndexedIdentifierInfo(variable, assignmentStatement);
           if (!identifierInfo) {
             continue;
+          }
+          if (varInit instanceof TableConstructorExpression) {
+            processTableConstructorExpressionsRecursive(identifierInfo, varInit);
           }
           identifierInfo.type = getIdentifierHintedType(completionInfo, identifierInfo.identifier!);
           if (identifierInfo.type) {
@@ -874,6 +895,29 @@ function processMemberInitialization(completionInfo: DocumentCompletionInfo) {
       let functionDeclaration: FunctionDeclaration = parseNode;
       if (functionDeclaration.identifier instanceof MemberExpression) {
         getOrCreateIndexedIdentifierInfo(functionDeclaration.identifier, functionDeclaration);
+      }
+    } else if (parseNode instanceof LocalStatement) {
+      // local statements can contain table constructors which are member initializations
+      let localStatement: LocalStatement = parseNode;
+      for (let i = 0; i < localStatement.variables.length; ++i) {
+        let variable = localStatement.variables[i];
+        if (!(variable instanceof Identifier)) {
+          continue;
+        }
+        let identifierInfo = completionInfo.getLocalIdentifierInfoAtOffset(variable.loc.rangeStart + 1, variable.name);
+        if (!identifierInfo) {
+          continue;
+        }
+        if (!localStatement.init) {
+          continue;
+        }
+        // skip if not initializing through a table constructor
+        let varInit = localStatement.init[i];
+        if (!(varInit instanceof TableConstructorExpression)) {
+          continue;
+        }
+        let tableConstructor: TableConstructorExpression = varInit;
+        processTableConstructorExpressionsRecursive(identifierInfo, tableConstructor);
       }
     }
     return ParseNodeVisitResult.Continue;

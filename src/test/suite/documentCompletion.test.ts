@@ -311,13 +311,56 @@ async function testMemberAssignments()
         assert(tInfo);
         tInfo = tInfo!;
         assert(tInfo.members);
-        assert(tInfo.members!.length === 4);
+        assert(tInfo.members!.length === 7);
+        {
+          let memberU = tInfo.getMemberByName("u")!;
+          assert(memberU);
+          assert(memberU.name === "u");
+          assert(!memberU.members);
+        }
+        {
+          let memberV = tInfo.getMemberByName("v")!;
+          assert(memberV);
+          assert(memberV.name === "v");
+          assert(!memberV.members);
+        }
+        {
+          let member_subTable = tInfo.getMemberByName("subTable")!;
+          assert(member_subTable);
+          assert(member_subTable.name === "subTable");
+          assert(member_subTable.members);
+          assert(member_subTable.members!.length === 3);
+          {
+            let member_subTable_a = member_subTable.getMemberByName("a")!;
+            assert(member_subTable_a);
+            assert(member_subTable_a.name === "a");
+            assert(!member_subTable_a.members);
+          }
+          {
+            let member_subTable_b = member_subTable.getMemberByName("b")!;
+            assert(member_subTable_b);
+            assert(member_subTable_b.name === "b");
+            assert(!member_subTable_b.members);
+          }
+          {
+            let member_subTable_subSubTable = member_subTable.getMemberByName("subSubTable")!;
+            assert(member_subTable_subSubTable);
+            assert(member_subTable_subSubTable.name === "subSubTable");
+            assert(member_subTable_subSubTable.members);
+            {
+              let member_subTable_subSubTable_cc = member_subTable_subSubTable.getMemberByName("cc")!;
+              assert(member_subTable_subSubTable_cc);
+              assert(member_subTable_subSubTable_cc.name === "cc");
+              assert(!member_subTable_subSubTable_cc.members);
+            }
+          }
+        }
         {
           let memberA = tInfo.getMemberByName("a")!;
           assert(memberA);
           assert(memberA.name === "a");
           assert(memberA.members);
-          assert(memberA.members!.length === 5);
+          assert(memberA.members!.length === 6);
           {
             let memberA_x = memberA.getMemberByName("x")!;
             assert(memberA_x);
@@ -348,6 +391,57 @@ async function testMemberAssignments()
             assert(memberA_u.name === 'u');
             assert(memberA_u.type === "CDerivedSampleClass");
             assert(!memberA_u.typeHinted);
+          }
+          {
+            let memberA_tbl = memberA.getMemberByName("tbl")!;
+            assert(memberA_tbl);
+            assert(memberA_tbl.name === 'tbl');
+            assert(memberA_tbl.members);
+            assert(memberA_tbl.members!.length === 3);
+
+            {
+              let memberU = memberA_tbl.getMemberByName("u")!;
+              assert(memberU);
+              assert(memberU.name === "u");
+              assert(!memberU.members);
+            }
+            {
+              let memberV = memberA_tbl.getMemberByName("v")!;
+              assert(memberV);
+              assert(memberV.name === "v");
+              assert(!memberV.members);
+            }
+            {
+              let member_subTable = memberA_tbl.getMemberByName("subTable")!;
+              assert(member_subTable);
+              assert(member_subTable.name === "subTable");
+              assert(member_subTable.members);
+              assert(member_subTable.members!.length === 3);
+              {
+                let member_subTable_a = member_subTable.getMemberByName("a")!;
+                assert(member_subTable_a);
+                assert(member_subTable_a.name === "a");
+                assert(!member_subTable_a.members);
+              }
+              {
+                let member_subTable_b = member_subTable.getMemberByName("b")!;
+                assert(member_subTable_b);
+                assert(member_subTable_b.name === "b");
+                assert(!member_subTable_b.members);
+              }
+              {
+                let member_subTable_subSubTable = member_subTable.getMemberByName("subSubTable")!;
+                assert(member_subTable_subSubTable);
+                assert(member_subTable_subSubTable.name === "subSubTable");
+                assert(member_subTable_subSubTable.members);
+                {
+                  let member_subTable_subSubTable_cc = member_subTable_subSubTable.getMemberByName("cc")!;
+                  assert(member_subTable_subSubTable_cc);
+                  assert(member_subTable_subSubTable_cc.name === "cc");
+                  assert(!member_subTable_subSubTable_cc.members);
+                }
+              }
+            }
           }
         }
         {
