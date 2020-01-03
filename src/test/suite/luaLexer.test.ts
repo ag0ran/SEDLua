@@ -83,6 +83,22 @@ function testLexerErrors()
   });
 }
 
+function testLexerErrors_UnexpectedTokens()
+{
+  test('Unexpected tokens', function() {
+    let testFileString = readTestFile("Content/ParsingErrors_UnexpectedTokens.lua");
+    let luaLexer = LuaLexer(testFileString);
+    let tokens = getAllTokens(luaLexer);
+    assert(tokens);
+    assert(luaLexer.errors.length === 1);
+    assert(luaLexer.errors[0].line === 2);
+    assert(luaLexer.errors[0].column === 19);
+    assert(luaLexer.errors[0].endLine === 2);
+    assert(luaLexer.errors[0].endColumn === 20);
+    assert(luaLexer.errors[0].message === "unexpected symbol '!' near '!'");
+  });
+}
+
 function testLexerStrings()
 {
   test('lexing strings', function() {
@@ -100,5 +116,6 @@ function testLexerStrings()
 
 suite('luaLexer', () => {
   testLexerErrors();
+  testLexerErrors_UnexpectedTokens();
   testLexerStrings();
 });

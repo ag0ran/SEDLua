@@ -555,7 +555,9 @@ export function LuaLexer(inputSource: string): LuaLexer {
         return scanPunctuator(input.charAt(index));
     }
     let value = input.charAt(index++);
-    return CreateToken(LuaTokenType.Unexpected, value, value, line, lineStart, tokenStart, index);
+    let token = CreateToken(LuaTokenType.Unexpected, value, value, line, lineStart, tokenStart, index);
+    raiseError(token, errorStrings.unexpected, 'symbol', token.rawValue, token.rawValue);
+    return token;
   }
 
   function reset() {
