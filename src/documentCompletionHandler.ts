@@ -113,14 +113,18 @@ export class DocumentCompletionInfo {
     return identifierInfo;
   }
 
-
-  getIdentifierInfoAtOffset(offset: number, name: string): ScopedIdentifierInfo|undefined {
+  getLocalIdentifierInfoAtOffset(offset: number, name: string): ScopedIdentifierInfo|undefined {
     let localIdentifierInfo: ScopedIdentifierInfo|undefined;
     this.forEachLocalAtOffset(offset, (identifierInfo: ScopedIdentifierInfo) => {
       if (!localIdentifierInfo && identifierInfo.name === name) {
         localIdentifierInfo = identifierInfo;
       }
     });
+    return localIdentifierInfo;
+  }
+
+  getIdentifierInfoAtOffset(offset: number, name: string): ScopedIdentifierInfo|undefined {
+    let localIdentifierInfo = this.getLocalIdentifierInfoAtOffset(offset, name);
     if (localIdentifierInfo) {
       return localIdentifierInfo;
     }
@@ -892,15 +896,20 @@ function processMemberInitialization(completionInfo: DocumentCompletionInfo) {
   function getOrCreateIndexedIdentifierInfo(memberExpressionOrIdentifier: MemberExpression|Identifier, initParseNode: ParseNode): ScopedIdentifierInfo|undefined {
     if (memberExpressionOrIdentifier instanceof Identifier) {
       let identifier: Identifier = memberExpressionOrIdentifier;
-      let identifierInfo = completionInfo.getIdentifierInfoAtOffset(identifier.loc.rangeStart + 1, identifier.name);
-      // try to create a global identifier info if unable to get an existing one
-      if (!identifierInfo) {
-        identifierInfo = completionInfo.getOrCreateGlobalIdentifierInfo(identifier.name);
+      // if this is a local identifier
+      if (identifier.isLocal) {
+        // try to get local identifier info
+        return completionInfo.getLocalIdentifierInfoAtOffset(identifier.loc.rangeStart + 1, identifier.name);
+      // else, a global identifier
+      } else {
+        // get or create a global identifier info
+        let identifierInfo = completionInfo.getOrCreateGlobalIdentifierInfo(identifier.name);
+        // if unable to create it, that means this global is not allowed for assignment
         if (!identifierInfo) {
-          completionInfo.addErrorAtLocation(identifier.loc, `Error assigning to global: ${identifier.name} is not a valid global! (Only "globals", "worldGlobals" or world script variables are allowed.)`);
+          completionInfo.addErrorAtLocation(identifier.loc, `Error assigning to global: ${identifier.name} does not allow creation nor assignment!\n(Only "globals", "worldGlobals" or world script variables are allowed.)`);
         }
+        return identifierInfo;
       }
-      return identifierInfo;
     } else if (memberExpressionOrIdentifier instanceof MemberExpression) {
       if (!(memberExpressionOrIdentifier.base instanceof Identifier) && !(memberExpressionOrIdentifier.base instanceof MemberExpression)) {
         return undefined;
@@ -939,9 +948,13 @@ function processMemberInitialization(completionInfo: DocumentCompletionInfo) {
         if (!varInit) {
           continue;
         }
-        if (variable instanceof MemberExpression) {
+        if (variable instanceof MemberExpression || variable instanceof Identifier) {
           let identifierInfo = getOrCreateIndexedIdentifierInfo(variable, assignmentStatement);
           if (!identifierInfo) {
+            continue;
+          }
+          // not interested in assignments to variables already initialized elsewhere (as we currently do not track multiple initializations)
+          if (identifierInfo.initializeParseNode !== assignmentStatement) {
             continue;
           }
           if (varInit instanceof TableConstructorExpression) {
