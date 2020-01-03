@@ -804,7 +804,6 @@ function parseDocument(documentText: string, documentSoftPath: string): Document
     result.parseResults = parseResults;
     result.tokens = parseResults.tokens;
     processTokens(result.tokens);
-    processScopedIdentifiers(result);
     processMemberInitialization(result);
 
     if (parseResults.errors !== undefined) {
@@ -848,34 +847,6 @@ function getIdentifierHintedType(completionInfo: DocumentCompletionInfo, identif
      }
    }
    return hintedType;
-}
-
-function processScopedIdentifiers(completionInfo: DocumentCompletionInfo) {
-  let parseResults = completionInfo.parseResults!;
-  if (!parseResults.parsedChunk) {
-    return;
-  }
-  // we will go through all scoped identifiers, caching their type
-  function goThroughBlockLocals(parseNode: ParseNode): ParseNodeVisitResult {
-    // we're interested in going through the block
-    if (parseNode.type === "Block") {
-      let block = parseNode as Block;
-      // now go through block's scope identifiers
-      for (let identifierInfo of block.scopeIdentifierInfos) {
-        if (!identifierInfo.identifier) {
-          continue;
-        }
-        identifierInfo.type = getIdentifierHintedType(completionInfo, identifierInfo.identifier);
-        if (identifierInfo.type) {
-          identifierInfo.typeHinted = true;
-        } else {
-          identifierInfo.type = resolveIdentifierTypeFromInitialization(identifierInfo, completionInfo);
-        }
-      }
-    }
-    return ParseNodeVisitResult.Continue;
-  }
-  parseResults.parsedChunk.visitChildren(goThroughBlockLocals); 
 }
 
 function processMemberInitialization(completionInfo: DocumentCompletionInfo) {
@@ -937,6 +908,18 @@ function processMemberInitialization(completionInfo: DocumentCompletionInfo) {
     }
   }
 
+  function resolveIdentifierInfoType(identifierInfo: ScopedIdentifierInfo) {
+    if (!identifierInfo.identifier) {
+      return;
+    }
+    identifierInfo.type = getIdentifierHintedType(completionInfo, identifierInfo.identifier);
+    if (identifierInfo.type) {
+      identifierInfo.typeHinted = true;
+    } else {
+      identifierInfo.type = resolveIdentifierTypeFromInitialization(identifierInfo, completionInfo);
+    }
+  }
+
   // we will go through all assignments
   function goThroughAssignments(parseNode: ParseNode): ParseNodeVisitResult{
     if (parseNode instanceof AssignmentStatement) {
@@ -974,6 +957,14 @@ function processMemberInitialization(completionInfo: DocumentCompletionInfo) {
       if (functionDeclaration.identifier instanceof MemberExpression) {
         getOrCreateIndexedIdentifierInfo(functionDeclaration.identifier, functionDeclaration);
       }
+      for (let param of functionDeclaration.parameters) {
+        if (param instanceof Identifier) {
+          let identifierInfo = completionInfo.getLocalIdentifierInfoAtOffset(functionDeclaration.body.loc.rangeStart + 1, param.name);
+          if (identifierInfo) {
+            resolveIdentifierInfoType(identifierInfo);
+          }
+        }
+      }
     } else if (parseNode instanceof LocalStatement) {
       // local statements can contain table constructors which are member initializations
       let localStatement: LocalStatement = parseNode;
@@ -991,11 +982,12 @@ function processMemberInitialization(completionInfo: DocumentCompletionInfo) {
         }
         // skip if not initializing through a table constructor
         let varInit = localStatement.init[i];
-        if (!(varInit instanceof TableConstructorExpression)) {
-          continue;
+        if (varInit instanceof TableConstructorExpression) {
+          let tableConstructor: TableConstructorExpression = varInit;
+          processTableConstructorExpressionsRecursive(identifierInfo, tableConstructor);
+        } else {
+          resolveIdentifierInfoType(identifierInfo);
         }
-        let tableConstructor: TableConstructorExpression = varInit;
-        processTableConstructorExpressionsRecursive(identifierInfo, tableConstructor);
       }
     }
     return ParseNodeVisitResult.Continue;
