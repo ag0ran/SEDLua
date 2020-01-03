@@ -37,6 +37,7 @@ export class DocumentCompletionInfo {
   }
   parseResults?: LuaParseResults;
   documentText: string;
+  globalIdentifierInfos = new Array<ScopedIdentifierInfo>();
 
   // Variables hinted the old way (before scope information). Should become obsolete some day.
   hintedVariables: Map<string, VariableInfo> = new Map<string, VariableInfo>();
@@ -60,14 +61,70 @@ export class DocumentCompletionInfo {
     return varInfos.get(variableName);
   }
 
-  getLocalIdentifierInfoAtOffset(offset: number, name: string): ScopedIdentifierInfo|undefined {
+  getGlobalIdentifierInfo(name: string):  ScopedIdentifierInfo|undefined {
+    // in serious engine scripting, there is only one global variable "globals" and "worldGlobals" maps to it in world scripts
+    if (name === "worldGlobals") {
+      name = "globals";
+    }
+    // try to return an existing global identifier info
+    for (let identifierInfo of this.globalIdentifierInfos) {
+      if (identifierInfo.name === name) {
+        return identifierInfo;
+      }
+    }
+    return undefined;
+  }
+
+  // Returns either the identifier info for the existing/created global variable or undefined when such global variable may not be created.
+  getOrCreateGlobalIdentifierInfo(name: string): ScopedIdentifierInfo|undefined {
+    // in serious engine scripting, there is only one global variable "globals" and "worldGlobals" maps to it in world scripts
+    if (name === "worldGlobals") {
+      name = "globals";
+    }
+    // try to return an existing global identifier info
+    let identifierInfo = this.getGlobalIdentifierInfo(name);
+    if (identifierInfo) {
+      return identifierInfo;
+    }
+    for (let identifierInfo of this.globalIdentifierInfos) {
+      if (identifierInfo.name === name) {
+        return identifierInfo;
+      }
+    }
+    // in serious engine, only "globals" and script variables are allowed globals
+    let varType: string|undefined;
+    if (name !== "globals") {
+      let varInfos = worldScriptsStorage.getVarInfosForScript(this.documentSoftPath);
+      if (!varInfos) {
+        return undefined;
+      }
+      let varInfo = varInfos.get(name);
+      if (!varInfo) {
+        return undefined;
+      }
+      varType = varInfo.type;
+    }
+
+    identifierInfo = new ScopedIdentifierInfo(name);
+    if (varType) {
+      identifierInfo.type = varType;
+    }
+    this.globalIdentifierInfos.push(identifierInfo);
+    return identifierInfo;
+  }
+
+
+  getIdentifierInfoAtOffset(offset: number, name: string): ScopedIdentifierInfo|undefined {
     let localIdentifierInfo: ScopedIdentifierInfo|undefined;
     this.forEachLocalAtOffset(offset, (identifierInfo: ScopedIdentifierInfo) => {
       if (!localIdentifierInfo && identifierInfo.name === name) {
         localIdentifierInfo = identifierInfo;
       }
     });
-    return localIdentifierInfo;
+    if (localIdentifierInfo) {
+      return localIdentifierInfo;
+    }
+    return this.getGlobalIdentifierInfo(name);
   }
 
   getIdentifierTypeForIdentifierInfo(localIdentifierInfo: ScopedIdentifierInfo|undefined, name: string): string|undefined {
@@ -88,7 +145,7 @@ export class DocumentCompletionInfo {
   }
 
   getIdentifierType(identifierOffset: number, name: string): string|undefined {
-    let localIdentifierInfo = this.getLocalIdentifierInfoAtOffset(identifierOffset, name);
+    let localIdentifierInfo = this.getIdentifierInfoAtOffset(identifierOffset, name);
     return this.getIdentifierTypeForIdentifierInfo(localIdentifierInfo, name);
   }
 
@@ -407,7 +464,7 @@ export class DocumentCompletionInfo {
 
     if (memberExpressionOrIdentifier instanceof Identifier) {
       let identifier: Identifier = memberExpressionOrIdentifier;
-      let identifierInfo = this.getLocalIdentifierInfoAtOffset(identifier.loc.rangeStart + 1, identifier.name);
+      let identifierInfo = this.getIdentifierInfoAtOffset(identifier.loc.rangeStart + 1, identifier.name);
       // return identifier info as lua object if it has members (or we're forcing getting of lua object)
       if (identifierInfo && (identifierInfo.members || getIdentifierAsLuaObject)) {
         return identifierInfoToLuaObjectCompletionInfoRecursive(identifierInfo);
@@ -559,7 +616,7 @@ export class DocumentCompletionInfo {
           }
         }
         if (!lastInfo) {
-          lastInfo = this.getLocalIdentifierInfoAtOffset(token.rangeStart + 1, token.rawValue);
+          lastInfo = this.getIdentifierInfoAtOffset(token.rangeStart + 1, token.rawValue);
         }
         if (!lastInfo) {
           return undefined;
@@ -747,7 +804,7 @@ function parseDocument(documentText: string, documentSoftPath: string): Document
     processMemberInitialization(result);
 
     if (parseResults.errors !== undefined) {
-      result.errors = [];
+      result.errors = result.errors || [];
       for (let err of parseResults.errors) {
         result.errors.push(new DocumentParsingError([err.line - 1, err.column - 1, err.endLine - 1, err.endColumn - 1], err.message));
       }
@@ -834,7 +891,15 @@ function processMemberInitialization(completionInfo: DocumentCompletionInfo) {
   }
   function getOrCreateIndexedIdentifierInfo(memberExpressionOrIdentifier: MemberExpression|Identifier, initParseNode: ParseNode): ScopedIdentifierInfo|undefined {
     if (memberExpressionOrIdentifier instanceof Identifier) {
-      let identifierInfo = completionInfo.getLocalIdentifierInfoAtOffset(memberExpressionOrIdentifier.loc.rangeStart + 1, memberExpressionOrIdentifier.name);
+      let identifier: Identifier = memberExpressionOrIdentifier;
+      let identifierInfo = completionInfo.getIdentifierInfoAtOffset(identifier.loc.rangeStart + 1, identifier.name);
+      // try to create a global identifier info if unable to get an existing one
+      if (!identifierInfo) {
+        identifierInfo = completionInfo.getOrCreateGlobalIdentifierInfo(identifier.name);
+        if (!identifierInfo) {
+          completionInfo.addErrorAtLocation(identifier.loc, `Error assigning to global: ${identifier.name} is not a valid global! (Only "globals", "worldGlobals" or world script variables are allowed.)`);
+        }
+      }
       return identifierInfo;
     } else if (memberExpressionOrIdentifier instanceof MemberExpression) {
       if (!(memberExpressionOrIdentifier.base instanceof Identifier) && !(memberExpressionOrIdentifier.base instanceof MemberExpression)) {
@@ -904,7 +969,7 @@ function processMemberInitialization(completionInfo: DocumentCompletionInfo) {
         if (!(variable instanceof Identifier)) {
           continue;
         }
-        let identifierInfo = completionInfo.getLocalIdentifierInfoAtOffset(variable.loc.rangeStart + 1, variable.name);
+        let identifierInfo = completionInfo.getIdentifierInfoAtOffset(variable.loc.rangeStart + 1, variable.name);
         if (!identifierInfo) {
           continue;
         }
@@ -986,7 +1051,7 @@ function resolveImportOrDofileOnIdentifierInfo(identifierInfo: ScopedIdentifierI
   let returnedArg = lastStatement.args[0];
   // for now handling only returned identifier and his members
   if (returnedArg instanceof Identifier) {
-    let returnedIdentifierInfo = scriptCompletionInfo.getLocalIdentifierInfoAtOffset(returnedArg.loc.rangeStart + 1, returnedArg.name);
+    let returnedIdentifierInfo = scriptCompletionInfo.getIdentifierInfoAtOffset(returnedArg.loc.rangeStart + 1, returnedArg.name);
     if (!returnedIdentifierInfo) {
       return true;
     }

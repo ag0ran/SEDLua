@@ -254,7 +254,7 @@ class SEDLua implements vscode.CompletionItemProvider, vscode.DefinitionProvider
       let tokenAtOffset = completionInfo.getTokenByIndex(iTokenAtOffset);
       if (tokenAtOffset.isIdentifier()) {
         // try to find a matching local var
-        let localIdentifierInfo = completionInfo.getLocalIdentifierInfoAtOffset(offset, tokenAtOffset.rawValue);
+        let localIdentifierInfo = completionInfo.getIdentifierInfoAtOffset(offset, tokenAtOffset.rawValue);
         if (localIdentifierInfo) {
           let identifierMarkdown = new Array<vscode.MarkdownString>();
           if (localIdentifierInfo.type) {
